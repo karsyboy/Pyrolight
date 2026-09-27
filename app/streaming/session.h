@@ -81,6 +81,11 @@ public:
             }
         }
 
+        if (serverCodecModes & SCM_PYROWAVE) mask |= VIDEO_FORMAT_PYROWAVE;
+        if (serverCodecModes & SCM_PYROWAVE_444) mask |= VIDEO_FORMAT_PYROWAVE_444;
+        if (serverCodecModes & SCM_PYROWAVE_HDR) mask |= VIDEO_FORMAT_PYROWAVE_HDR;
+        serverCodecModes &= ~SCM_MASK_PYROWAVE;
+
         // Make sure nobody forgets to update this for new SCM values
         SDL_assert(serverCodecModes == 0);
 

@@ -46,7 +46,17 @@ pushd $BUILD_FOLDER
 # work even in X11. To avoid this, we will disable Wayland support for the AppImage.
 #
 # We disable DRM support because linuxdeploy doesn't bundle the appropriate libraries for Qt EGLFS.
-qmake6 $SOURCE_ROOT/moonlight-qt.pro CONFIG+=disable-wayland CONFIG+=disable-libdrm PREFIX=$DEPLOY_FOLDER/usr DEFINES+=APP_IMAGE || fail "Qmake failed!"
+QMAKE_CONFIG=(CONFIG+=disable-wayland CONFIG+=disable-libdrm PREFIX=$DEPLOY_FOLDER/usr DEFINES+=APP_IMAGE)
+LINUXDEPLOY_EXTRA_ARGS=()
+if [ -n "${PYROWAVE_PREFIX:-}" ]; then
+  PYROWAVE_PREFIX=$(readlink -f "$PYROWAVE_PREFIX")
+  [ -f "$PYROWAVE_PREFIX/share/pkgconfig/pyrowave-shared.pc" ] || fail "Invalid PYROWAVE_PREFIX: pyrowave-shared.pc not found"
+  [ -f "$PYROWAVE_PREFIX/lib/libpyrowave-shared.so.0" ] || fail "Invalid PYROWAVE_PREFIX: libpyrowave-shared.so.0 not found"
+  export PKG_CONFIG_PATH="$PYROWAVE_PREFIX/share/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+  QMAKE_CONFIG+=(CONFIG+=enable-pyrowave)
+  LINUXDEPLOY_EXTRA_ARGS+=(--library="$PYROWAVE_PREFIX/lib/libpyrowave-shared.so.0")
+fi
+qmake6 $SOURCE_ROOT/moonlight-qt.pro "${QMAKE_CONFIG[@]}" || fail "Qmake failed!"
 popd
 
 echo Compiling Moonlight in $BUILD_CONFIG configuration
@@ -130,6 +140,7 @@ pushd $INSTALLER_FOLDER
 # bundled last-resort copy for hosts without libva).
 VERSION=$VERSION $LINUXDEPLOY --appdir $DEPLOY_FOLDER \
   --library=/usr/local/lib/libSDL3.so.0 \
+  "${LINUXDEPLOY_EXTRA_ARGS[@]}" \
   --plugin qt \
   --custom-apprun $APP_RUN \
   --exclude-library=libva.so* \

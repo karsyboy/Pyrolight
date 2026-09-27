@@ -419,3 +419,29 @@ int StreamingPreferences::getDefaultBitrate(int width, int height, int fps, bool
 
     return qRound(resolutionFactor * frameRateFactor) * 1000;
 }
+
+#ifdef HAVE_PYROWAVE
+#include <vulkan/vulkan.h>
+#include <pyrowave.h>
+#endif
+
+bool StreamingPreferences::isPyroWaveAvailable()
+{
+#ifdef HAVE_PYROWAVE
+    static const bool supported = [] {
+        pyrowave_device device = nullptr;
+        if (pyrowave_create_default_device(&device) != PYROWAVE_SUCCESS) return false;
+        pyrowave_decoder_create_info info {};
+        info.device = device;
+        info.width = info.height = 64;
+        pyrowave_decoder decoder = nullptr;
+        const bool created = pyrowave_decoder_create(&info, &decoder) == PYROWAVE_SUCCESS;
+        if (decoder) pyrowave_decoder_destroy(decoder);
+        pyrowave_device_destroy(device);
+        return created;
+    }();
+    return supported;
+#else
+    return false;
+#endif
+}

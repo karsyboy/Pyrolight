@@ -375,6 +375,27 @@ bool PlVkRenderer::tryInitializeDevice(VkPhysicalDevice device, VkPhysicalDevice
         vkParams.extra_queues = VK_QUEUE_FLAG_BITS_MAX_ENUM;
     }
 
+    VkPhysicalDeviceVulkan13Features pyro13 {};
+    VkPhysicalDeviceVulkan12Features pyro12 {};
+    VkPhysicalDeviceFeatures2 pyroFeatures {};
+    if (decoderParams->videoFormat & VIDEO_FORMAT_MASK_PYROWAVE) {
+        if (deviceProps->apiVersion < VK_API_VERSION_1_3) return false;
+        pyro13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+        pyro13.subgroupSizeControl = VK_TRUE;
+        pyro13.computeFullSubgroups = VK_TRUE;
+        pyro12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+        pyro12.pNext = &pyro13;
+        pyro12.timelineSemaphore = VK_TRUE;
+        pyro12.shaderFloat16 = VK_TRUE;
+        pyro12.storageBuffer8BitAccess = VK_TRUE;
+        pyroFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        pyroFeatures.pNext = &pyro12;
+        pyroFeatures.features.shaderInt16 = VK_TRUE;
+        vkParams.features = &pyroFeatures;
+        vkParams.async_compute = false;
+        vkParams.async_transfer = false;
+    }
+
     {
         // Don't let Qt take DRM master from us during pl_vulkan_create()
         DrmMasterLocker locker;
@@ -489,8 +510,8 @@ bool PlVkRenderer::initialize(PDECODER_PARAMETERS params)
     //
     // For HDR streaming, we try to find an HDR-capable Vulkan device first then
     // try another search without the HDR requirement if the first attempt fails.
-    if (!chooseVulkanDevice(params, params->videoFormat & VIDEO_FORMAT_MASK_10BIT) &&
-        (!(params->videoFormat & VIDEO_FORMAT_MASK_10BIT) || !chooseVulkanDevice(params, false))) {
+    if (!chooseVulkanDevice(params, params->videoFormat & VIDEO_FORMAT_MASK_HDR) &&
+        (!(params->videoFormat & VIDEO_FORMAT_MASK_HDR) || !chooseVulkanDevice(params, false))) {
         return false;
     }
 
@@ -620,7 +641,7 @@ bool PlVkRenderer::initialize(PDECODER_PARAMETERS params)
     // Set an initial wide colorspace hint to ensure that MoltenVK sets wantsExtendedDynamicRangeContent
     // before we request the first drawable. If we don't do this, our Metal layer ends up stuck in SDR
     // mode even if we later change the colorspace to VK_COLOR_SPACE_HDR10_ST2084_EXT.
-    if (params->videoFormat & VIDEO_FORMAT_MASK_10BIT) {
+    if (params->videoFormat & VIDEO_FORMAT_MASK_HDR) {
         pl_color_space wideColorspace = {};
         wideColorspace.primaries = PL_COLOR_PRIM_BT_709;
         wideColorspace.transfer = PL_COLOR_TRC_SCRGB;
@@ -958,7 +979,7 @@ void PlVkRenderer::cleanupRenderContext()
 
 void PlVkRenderer::renderFrame(AVFrame *frame)
 {
-    pl_frame mappedFrame, targetFrame;
+    pl_frame mappedFrame;
 
     // If waitToRender() failed to get the next swapchain frame, skip
     // rendering this frame. It probably means the window is occluded.
@@ -970,6 +991,15 @@ void PlVkRenderer::renderFrame(AVFrame *frame)
         // This function logs internally
         return;
     }
+
+    renderPlaceboFrame(mappedFrame);
+    unmapAvFrameFromPlacebo(frame, &mappedFrame);
+}
+
+void PlVkRenderer::renderPlaceboFrame(pl_frame& mappedFrame)
+{
+    pl_frame targetFrame;
+    if (!m_HasPendingSwapchainFrame) return;
 
     // Adjust the swapchain if the colorspace of incoming frames has changed
     if (!pl_color_space_equal(&mappedFrame.color, &m_LastColorspace)) {
@@ -1129,7 +1159,6 @@ UnmapExit:
         pl_tex_destroy(m_Vulkan->gpu, &texture);
     }
 
-    unmapAvFrameFromPlacebo(frame, &mappedFrame);
 }
 
 bool PlVkRenderer::testRenderFrame(AVFrame *frame)

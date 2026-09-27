@@ -54,6 +54,11 @@ public:
     virtual bool isPixelFormatSupported(int videoFormat, enum AVPixelFormat pixelFormat) override;
     virtual AVPixelFormat getPreferredPixelFormat(int videoFormat) override;
 
+    // GPU codec integration: the renderer owns the Vulkan device and textures.
+    pl_vulkan getVulkan() const { return m_Vulkan; }
+    pl_vk_inst getVulkanInstance() const { return m_PlVkInstance; }
+    void renderPlaceboFrame(pl_frame& mappedFrame);
+
 private:
     static void lockQueue(AVHWDeviceContext *dev_ctx, uint32_t queue_family, uint32_t index);
     static void unlockQueue(AVHWDeviceContext *dev_ctx, uint32_t queue_family, uint32_t index);

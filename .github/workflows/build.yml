@@ -31,6 +31,7 @@ jobs:
     uses: ./.github/workflows/build-appimage.yml
     with:
       ci_version: ${{ needs.setup.outputs.ci_version }}
+      enable_pyrowave: ${{ github.ref_name == 'pyrowave-hdr-444' }}
 
   build-steamlink:
     needs: setup
