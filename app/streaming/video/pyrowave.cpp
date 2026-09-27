@@ -3,6 +3,7 @@
 #include "streaming/session.h"
 #include <QtEndian>
 #include <cstring>
+#include <cstdio>
 
 PyroWaveVideoDecoder::~PyroWaveVideoDecoder()
 {
@@ -139,6 +140,109 @@ bool PyroWaveVideoDecoder::initialize(PDECODER_PARAMETERS params)
     return true;
 }
 
+void PyroWaveVideoDecoder::addVideoStats(const VIDEO_STATS& src, VIDEO_STATS& dst, uint64_t now)
+{
+    dst.receivedFrames += src.receivedFrames;
+    dst.decodedFrames += src.decodedFrames;
+    dst.renderedFrames += src.renderedFrames;
+    dst.totalFrames += src.totalFrames;
+    dst.networkDroppedFrames += src.networkDroppedFrames;
+    dst.pacerDroppedFrames += src.pacerDroppedFrames;
+    dst.totalReassemblyTimeUs += src.totalReassemblyTimeUs;
+    dst.totalDecodeTimeUs += src.totalDecodeTimeUs;
+    dst.totalPacerTimeUs += src.totalPacerTimeUs;
+    dst.totalRenderTimeUs += src.totalRenderTimeUs;
+
+    if (dst.minHostProcessingLatency == 0 ||
+        (src.minHostProcessingLatency != 0 && src.minHostProcessingLatency < dst.minHostProcessingLatency)) {
+        dst.minHostProcessingLatency = src.minHostProcessingLatency;
+    }
+    dst.maxHostProcessingLatency = qMax(dst.maxHostProcessingLatency, src.maxHostProcessingLatency);
+    dst.totalHostProcessingLatency += src.totalHostProcessingLatency;
+    dst.framesWithHostProcessingLatency += src.framesWithHostProcessingLatency;
+
+    if (!LiGetEstimatedRttInfo(&dst.lastRtt, &dst.lastRttVariance)) {
+        dst.lastRtt = dst.lastRttVariance = 0;
+    }
+    if (dst.measurementStartUs == 0 ||
+        (src.measurementStartUs != 0 && src.measurementStartUs < dst.measurementStartUs)) {
+        dst.measurementStartUs = src.measurementStartUs;
+    }
+    if (dst.measurementStartUs != 0 && now > dst.measurementStartUs) {
+        const double seconds = double(now - dst.measurementStartUs) / 1000000.0;
+        dst.totalFps = double(dst.totalFrames) / seconds;
+        dst.receivedFps = double(dst.receivedFrames) / seconds;
+        dst.decodedFps = double(dst.decodedFrames) / seconds;
+        dst.renderedFps = double(dst.renderedFrames) / seconds;
+    }
+}
+
+void PyroWaveVideoDecoder::updatePerformanceOverlay(const VIDEO_STATS& stats)
+{
+    auto& overlay = Session::get()->getOverlayManager();
+    if (!overlay.isOverlayEnabled(Overlay::OverlayDebug) || stats.receivedFrames == 0) {
+        return;
+    }
+
+    char text[1024];
+    const char* chroma = m_Format & VIDEO_FORMAT_PYROWAVE_444 ? " 4:4:4" : " 4:2:0";
+    const char* dynamicRange = m_Format & VIDEO_FORMAT_PYROWAVE_HDR ? " HDR" : " SDR";
+    char rtt[64];
+    if (stats.lastRtt != 0) {
+        std::snprintf(rtt, sizeof(rtt), "%u ms (variance: %u ms)", stats.lastRtt, stats.lastRttVariance);
+    }
+    else {
+        std::snprintf(rtt, sizeof(rtt), "N/A");
+    }
+
+    int used = std::snprintf(text, sizeof(text),
+        "Video stream: %dx%d %.2f FPS (Codec: PyroWave%s%s)\n"
+        "Incoming frame rate from network: %.2f FPS\n"
+        "Decoding frame rate: %.2f FPS\n"
+        "Rendering frame rate: %.2f FPS\n",
+        m_Width, m_Height, stats.totalFps, dynamicRange, chroma,
+        stats.receivedFps, stats.decodedFps, stats.renderedFps);
+    if (used < 0 || used >= int(sizeof(text))) {
+        return;
+    }
+
+    if (stats.framesWithHostProcessingLatency != 0) {
+        const int written = std::snprintf(text + used, sizeof(text) - size_t(used),
+            "Host processing latency min/max/average: %.1f/%.1f/%.1f ms\n",
+            float(stats.minHostProcessingLatency) / 10.0f,
+            float(stats.maxHostProcessingLatency) / 10.0f,
+            float(stats.totalHostProcessingLatency) / 10.0f / stats.framesWithHostProcessingLatency);
+        if (written < 0 || written >= int(sizeof(text)) - used) {
+            return;
+        }
+        used += written;
+    }
+
+    if (stats.renderedFrames != 0) {
+        const double networkDropPercent = stats.totalFrames != 0 ?
+            double(stats.networkDroppedFrames) * 100.0 / stats.totalFrames : 0.0;
+        const double clientDropPercent = stats.receivedFrames != 0 ?
+            double(stats.pacerDroppedFrames) * 100.0 / stats.receivedFrames : 0.0;
+        const int written = std::snprintf(text + used, sizeof(text) - size_t(used),
+            "Frames dropped by your network connection: %.2f%%\n"
+            "Frames dropped by the client frame queue: %.2f%%\n"
+            "Average network latency: %s\n"
+            "Average decoding time: %.2f ms\n"
+            "Average frame queue delay: %.2f ms\n"
+            "Average rendering time: %.2f ms\n",
+            networkDropPercent, clientDropPercent, rtt,
+            double(stats.totalDecodeTimeUs) / 1000.0 / stats.decodedFrames,
+            double(stats.totalPacerTimeUs) / 1000.0 / stats.renderedFrames,
+            double(stats.totalRenderTimeUs) / 1000.0 / stats.renderedFrames);
+        if (written < 0 || written >= int(sizeof(text)) - used) {
+            return;
+        }
+        used += written;
+    }
+
+    overlay.updateOverlayText(Overlay::OverlayDebug, text);
+}
+
 int PyroWaveVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
 {
     if (du->fullLength < 8 || du->fullLength > int(PYROWAVE_MAX_FRAME_BYTES)) return DR_OK;
@@ -150,16 +254,68 @@ int PyroWaveVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
         offset += entry->length;
     }
     if (offset != size_t(du->fullLength)) return DR_OK;
-    std::lock_guard<std::mutex> lock(m_Mutex);
-    m_Pending = std::move(frame);
-    m_PendingSize = offset;
-    m_EnqueueTime = LiGetMicroseconds();
-    if (!m_EventQueued) {
-        SDL_Event event {};
-        event.type = SDL_USEREVENT;
-        event.user.code = SDL_CODE_FRAME_READY;
-        event.user.windowID = SDL_GetWindowID(m_Window);
-        m_EventQueued = SDL_PushEvent(&event) == 1;
+    const uint64_t now = LiGetMicroseconds();
+    VIDEO_STATS overlayStats {};
+    bool refreshOverlay = false;
+    {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        if (m_ActiveVideoStats.measurementStartUs == 0) {
+            m_ActiveVideoStats.measurementStartUs = now;
+            m_LastFrameNumber = du->frameNumber;
+        }
+        else {
+            if (du->frameNumber > m_LastFrameNumber + 1) {
+                const uint32_t dropped = uint32_t(du->frameNumber - (m_LastFrameNumber + 1));
+                m_ActiveVideoStats.networkDroppedFrames += dropped;
+                m_ActiveVideoStats.totalFrames += dropped;
+            }
+            m_LastFrameNumber = du->frameNumber;
+        }
+
+        if (now > m_ActiveVideoStats.measurementStartUs + 1000000) {
+            addVideoStats(m_LastVideoStats, overlayStats, now);
+            addVideoStats(m_ActiveVideoStats, overlayStats, now);
+            addVideoStats(m_ActiveVideoStats, m_GlobalVideoStats, now);
+            m_LastVideoStats = m_ActiveVideoStats;
+            m_ActiveVideoStats = {};
+            m_ActiveVideoStats.measurementStartUs = now;
+            refreshOverlay = true;
+        }
+
+        if (du->frameHostProcessingLatency != 0) {
+            if (m_ActiveVideoStats.minHostProcessingLatency == 0) {
+                m_ActiveVideoStats.minHostProcessingLatency = du->frameHostProcessingLatency;
+            }
+            else {
+                m_ActiveVideoStats.minHostProcessingLatency =
+                    qMin(m_ActiveVideoStats.minHostProcessingLatency, du->frameHostProcessingLatency);
+            }
+            m_ActiveVideoStats.maxHostProcessingLatency =
+                qMax(m_ActiveVideoStats.maxHostProcessingLatency, du->frameHostProcessingLatency);
+            m_ActiveVideoStats.totalHostProcessingLatency += du->frameHostProcessingLatency;
+            m_ActiveVideoStats.framesWithHostProcessingLatency++;
+        }
+        m_ActiveVideoStats.receivedFrames++;
+        m_ActiveVideoStats.totalFrames++;
+        m_ActiveVideoStats.totalReassemblyTimeUs += du->enqueueTimeUs - du->receiveTimeUs;
+        if (!m_Pending.empty()) {
+            // The mailbox keeps the newest complete frame to minimize latency.
+            m_ActiveVideoStats.pacerDroppedFrames++;
+        }
+
+        m_Pending = std::move(frame);
+        m_PendingSize = offset;
+        m_EnqueueTime = now;
+        if (!m_EventQueued) {
+            SDL_Event event {};
+            event.type = SDL_USEREVENT;
+            event.user.code = SDL_CODE_FRAME_READY;
+            event.user.windowID = SDL_GetWindowID(m_Window);
+            m_EventQueued = SDL_PushEvent(&event) == 1;
+        }
+    }
+    if (refreshOverlay) {
+        updatePerformanceOverlay(overlayStats);
     }
     return DR_OK;
 }
@@ -177,7 +333,8 @@ void PyroWaveVideoDecoder::releasePlanes(uint64_t value)
     }
 }
 
-bool PyroWaveVideoDecoder::decodeFrame(const std::vector<uint32_t>& bytes, size_t size)
+bool PyroWaveVideoDecoder::decodeFrame(const std::vector<uint32_t>& bytes, size_t size,
+                                       uint64_t* decodeTimeUs, uint64_t* renderTimeUs)
 {
     if (size < 8 || size > PYROWAVE_MAX_FRAME_BYTES || size > bytes.size() * sizeof(uint32_t)) return false;
     // Sequence header metadata is used directly; no assumptions about bit depth.
@@ -210,7 +367,7 @@ bool PyroWaveVideoDecoder::decodeFrame(const std::vector<uint32_t>& bytes, size_
     pyrowave_gpu_sync_operation acquire {}, release {};
     acquire.sync = {m_Timeline, m_Value};
     release.sync = {m_Timeline, ++m_Value};
-    const auto start = LiGetMicroseconds();
+    const auto decodeStart = LiGetMicroseconds();
     auto result = pyrowave_decoder_decode_gpu_buffer(m_Decoder, &acquire, &release, &m_Buffers);
     if (result != PYROWAVE_SUCCESS) {
         // No valid signal will follow a failed decode. Finish before dropping ownership.
@@ -218,6 +375,7 @@ bool PyroWaveVideoDecoder::decodeFrame(const std::vector<uint32_t>& bytes, size_
         releasePlanes(0);
         return false;
     }
+    const auto decodeEnd = LiGetMicroseconds();
     releasePlanes(m_Value);
     pl_frame frame {};
     frame.num_planes = 3;
@@ -250,15 +408,19 @@ bool PyroWaveVideoDecoder::decodeFrame(const std::vector<uint32_t>& bytes, size_
         frame.planes[p].component_mapping[0] = p;
     }
     pl_frame_set_chroma_location(&frame, b >> 31 ? PL_CHROMA_LEFT : PL_CHROMA_CENTER);
+    const auto renderStart = LiGetMicroseconds();
     m_Renderer->waitToRender();
     m_Renderer->renderPlaceboFrame(frame);
+    const auto renderEnd = LiGetMicroseconds();
+    if (decodeTimeUs) *decodeTimeUs = decodeEnd - decodeStart;
+    if (renderTimeUs) *renderTimeUs = renderEnd - renderStart;
     SDL_LogDebug(SDL_LOG_CATEGORY_APPLICATION, "PyroWave decode+render submission: %llu us (%zu bytes)",
-                 static_cast<unsigned long long>(LiGetMicroseconds() - start), size);
-    if (SDL_LogGetPriority(SDL_LOG_CATEGORY_APPLICATION) <= SDL_LOG_PRIORITY_DEBUG && start - m_LastStatsTime >= 1000000) {
+                 static_cast<unsigned long long>(renderEnd - decodeStart), size);
+    if (SDL_LogGetPriority(SDL_LOG_CATEGORY_APPLICATION) <= SDL_LOG_PRIORITY_DEBUG && decodeStart - m_LastStatsTime >= 1000000) {
         pyrowave_device_report_performance_stats(m_Device, [](void*, const char* message) {
             SDL_LogDebug(SDL_LOG_CATEGORY_APPLICATION, "PyroWave GPU: %s", message);
         }, nullptr, true);
-        m_LastStatsTime = start;
+        m_LastStatsTime = decodeStart;
     }
     return true;
 }
@@ -278,11 +440,22 @@ void PyroWaveVideoDecoder::renderFrameOnMainThread()
     if (frame.empty()) return;
     SDL_LogDebug(SDL_LOG_CATEGORY_APPLICATION, "PyroWave packet completion to decode: %llu us",
                  static_cast<unsigned long long>(LiGetMicroseconds() - enqueueTime));
-    if (!decodeFrame(frame, size)) {
+    const uint64_t processingStart = LiGetMicroseconds();
+    uint64_t decodeTimeUs = 0;
+    uint64_t renderTimeUs = 0;
+    if (!decodeFrame(frame, size, &decodeTimeUs, &renderTimeUs)) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Rejected incomplete/invalid PyroWave frame or GPU operation failed");
         if (pl_gpu_is_failed(m_Renderer->getVulkan()->gpu)) {
             SDL_Event event {}; event.type = SDL_RENDER_DEVICE_RESET; SDL_PushEvent(&event);
         }
+    }
+    else {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_ActiveVideoStats.decodedFrames++;
+        m_ActiveVideoStats.renderedFrames++;
+        m_ActiveVideoStats.totalDecodeTimeUs += decodeTimeUs;
+        m_ActiveVideoStats.totalPacerTimeUs += processingStart - enqueueTime;
+        m_ActiveVideoStats.totalRenderTimeUs += renderTimeUs;
     }
 }
 

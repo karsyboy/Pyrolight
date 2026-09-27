@@ -29,8 +29,11 @@ private:
     static void unlockQueue(void* opaque);
     bool borrowDevice();
     bool createPlanes();
-    bool decodeFrame(const std::vector<uint32_t>& bytes, size_t size);
+    bool decodeFrame(const std::vector<uint32_t>& bytes, size_t size,
+                     uint64_t* decodeTimeUs = nullptr, uint64_t* renderTimeUs = nullptr);
     void releasePlanes(uint64_t value);
+    static void addVideoStats(const VIDEO_STATS& src, VIDEO_STATS& dst, uint64_t now);
+    void updatePerformanceOverlay(const VIDEO_STATS& stats);
     std::unique_ptr<PlVkRenderer> m_Renderer;
     pyrowave_device m_Device = nullptr;
     pyrowave_decoder m_Decoder = nullptr;
@@ -53,4 +56,8 @@ private:
     bool m_OverlayAttached = false;
     uint64_t m_EnqueueTime = 0;
     uint64_t m_LastStatsTime = 0;
+    VIDEO_STATS m_ActiveVideoStats = {};
+    VIDEO_STATS m_LastVideoStats = {};
+    VIDEO_STATS m_GlobalVideoStats = {};
+    int m_LastFrameNumber = 0;
 };

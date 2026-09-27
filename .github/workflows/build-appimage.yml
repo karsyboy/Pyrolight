@@ -9,6 +9,10 @@ on:
       ci_version:
         required: true
         type: string
+      enable_pyrowave:
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -21,6 +25,15 @@ jobs:
         uses: actions/checkout@v5
         with:
           submodules: 'recursive'
+          fetch-depth: 1
+
+      - name: Checkout PyroWave
+        if: inputs.enable_pyrowave
+        uses: actions/checkout@v5
+        with:
+          repository: karsyboy/pyrowave
+          ref: pyrowave-hdr-444
+          path: deps/PyroWave
           fetch-depth: 1
 
       - name: Setup environment
@@ -153,9 +166,18 @@ jobs:
           chmod +x linuxdeploy*.AppImage
 
       - name: Build Binaries
+        if: inputs.enable_pyrowave == false
         run: |
           sudo ldconfig
           scripts/build-appimage.sh
+
+      - name: Build PyroWave Binaries
+        if: inputs.enable_pyrowave
+        env:
+          PYROWAVE_SOURCE: ${{ github.workspace }}/deps/PyroWave
+        run: |
+          sudo ldconfig
+          scripts/build-pyrowave-appimage.sh
 
       - name: Upload Binaries
         uses: actions/upload-artifact@v6

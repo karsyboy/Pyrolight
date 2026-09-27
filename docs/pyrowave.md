@@ -59,9 +59,39 @@ The first invocation verifies decoder creation, consecutive frames, malformed in
 
 Debug logging reports packet completion-to-decode and decode/render submission durations plus periodic GPU timestamps. The mailbox is bounded to one latest frame and all encoded inputs are capped at 3 MiB. Whole-frame FEC remains in use; incomplete frames are discarded and the next intra frame resumes decoding without IDR requests.
 
-## Package a Steam Deck test AppImage
+## Package a Steam Deck AppImage
+
+For Gaming Mode, build PyroWave and Moonlight in the same Ubuntu 22.04
+environment used by Moonlight's upstream AppImage workflow. This retains the
+normal Moonlight AppImage runtime and X11/GameScope integration instead of
+mixing a current Arch/CachyOS graphics stack with SteamOS libraries.
+
+Install the dependencies from `.github/workflows/build-appimage.yml`, place the
+patched PyroWave checkout next to this repository (or set `PYROWAVE_SOURCE`),
+install `linuxdeploy-x86_64.AppImage` and
+`linuxdeploy-plugin-qt-x86_64.AppImage` in `PATH`, then run:
+
+```sh
+PYROWAVE_SOURCE="$PW_ROOT/pyrowave" \
+  "$PW_ROOT/moonlight-qt/scripts/build-pyrowave-appimage.sh"
+```
+
+The output is created under
+`moonlight-qt/build/installer-release/`. This path deliberately uses upstream's
+`CONFIG+=disable-wayland` AppImage configuration and leaves SteamOS's Vulkan
+loader/driver boundary intact. It is the supported package for Steam Deck Game
+Mode.
+
+### Private-runtime fallback package
 
 `scripts/package-pyrowave-appimage.py` packages an existing feature-enabled binary plus the renderer diagnostic. This Arch/CachyOS test packager includes a private matching glibc loader/runtime to avoid depending on the Deck having the build machine's glibc. Qt/QML, SDL3 (for SDL2-compat), audio/input backends and the patched PyroWave library are included. GPU drivers remain supplied by SteamOS. This differs from upstream's oldest-distribution AppImage build; actual Deck operation still requires a Deck test.
+
+This fallback is useful for desktop testing but is not equivalent to Moonlight's
+normal AppImage runtime. In Steam Deck Game Mode its launcher disables the
+GameScope Vulkan implicit layer and forces X11 to prevent the private Vulkan
+stack from crashing in `vkroots`. That compatibility mode cannot provide the
+normal GameScope HDR path, so use the Ubuntu 22.04 build above for full Game
+Mode behavior.
 
 Use Python 3, binutils, qmake6, an official AppImage packager/runtime, and the existing ON build. Extract the packager with `--appimage-extract` if FUSE is unavailable. Preserve/check the downloaded tool hashes and pass an explicit runtime file so packaging performs no implicit runtime download.
 

@@ -136,6 +136,16 @@ export QT_QUICK_CONTROLS_STYLE=${QT_QUICK_CONTROLS_STYLE:-Material}
 export QT_QPA_PLATFORMTHEME=xdgdesktopportal
 # Private runtime is passed to the loader, not inherited by host child programs.
 unset LD_PRELOAD LD_AUDIT
+# This fallback packager mixes a private glibc/Vulkan userspace with host GPU
+# drivers. Do not allow GameScope's host implicit Vulkan layer into that mixed
+# process: it can abort in vkroots before Moonlight creates its first window.
+# The normal Ubuntu 22.04 AppImage build does not need this compatibility path.
+if [ -n "${GAMESCOPE_WAYLAND_DISPLAY:-}" ] || [ "${SteamDeck:-0}" = 1 ]; then
+    export ENABLE_GAMESCOPE_WSI=0
+    export VK_LOADER_LAYERS_DISABLE="*gamescope*${VK_LOADER_LAYERS_DISABLE:+,$VK_LOADER_LAYERS_DISABLE}"
+    export QT_QPA_PLATFORM=${QT_QPA_PLATFORM:-xcb}
+    export SDL_VIDEODRIVER=${SDL_VIDEODRIVER:-x11}
+fi
 program=moonlight
 if [ "${1:-}" = --pyrowave-render-test ]; then
     shift
