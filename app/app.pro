@@ -580,3 +580,21 @@ macx {
 
 VERSION = "$$cat(version.txt)"
 DEFINES += VERSION_STR=\\\"$$cat(version.txt)\\\"
+
+# Explicit opt-in, reproducible standalone dependency (see docs/pyrowave.md).
+enable-pyrowave {
+    !linux: error("PyroWave currently supports Linux only")
+    !libplacebo: error("PyroWave requires the libplacebo Vulkan renderer")
+    !packagesExist("pyrowave-shared = 0.7.0"): error("PyroWave requires patched standalone API 0.7.0")
+    PKGCONFIG += pyrowave-shared
+    DEFINES += HAVE_PYROWAVE
+    SOURCES += streaming/video/pyrowave.cpp
+    HEADERS += streaming/video/pyrowave.h
+}
+
+pyrowave-smoke-test {
+    !enable-pyrowave: error("Renderer smoke test requires enable-pyrowave")
+    TARGET = pyrowave-render-smoke
+    SOURCES -= main.cpp
+    SOURCES += tests/pyrowave_smoke.cpp
+}

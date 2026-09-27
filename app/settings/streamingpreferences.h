@@ -15,6 +15,7 @@ public:
     getDefaultBitrate(int width, int height, int fps, bool yuv444);
 
     Q_INVOKABLE void save();
+    Q_INVOKABLE static bool isPyroWaveAvailable();
 
     void reload();
 
@@ -32,7 +33,8 @@ public:
         VCC_FORCE_H264,
         VCC_FORCE_HEVC,
         VCC_FORCE_HEVC_HDR_DEPRECATED, // Kept for backwards compatibility
-        VCC_FORCE_AV1
+        VCC_FORCE_AV1,
+        VCC_FORCE_PYROWAVE
     };
     Q_ENUM(VideoCodecConfig)
 

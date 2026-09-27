@@ -11,6 +11,11 @@
 #include "video/ffmpeg.h"
 #endif
 
+#ifdef HAVE_PYROWAVE
+#include "video/pyrowave.h"
+#include <PyroWave.h>
+#endif
+
 #ifdef HAVE_SLVIDEO
 #include "video/slvid.h"
 #endif
@@ -301,6 +306,17 @@ bool Session::chooseDecoder(StreamingPreferences::VideoDecoderSelection vds,
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                 "V-sync %s",
                 enableVsync ? "enabled" : "disabled");
+
+    if (videoFormat & VIDEO_FORMAT_MASK_PYROWAVE) {
+#ifdef HAVE_PYROWAVE
+        chosenDecoder = new PyroWaveVideoDecoder();
+        if (chosenDecoder->initialize(&params)) return true;
+        delete chosenDecoder;
+#endif
+        chosenDecoder = nullptr;
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "PyroWave Vulkan initialization failed; select another codec or check the GPU/renderer logs");
+        return false;
+    }
 
 #ifdef HAVE_SLVIDEO
     chosenDecoder = new SLVideoDecoder(testOnly);
@@ -851,6 +867,11 @@ bool Session::initialize(QQuickWindow* qtWindow)
 #endif
         break;
     }
+    case StreamingPreferences::VCC_FORCE_PYROWAVE:
+        m_SupportedVideoFormats.clear();
+        m_SupportedVideoFormats.append((m_Preferences->enableYUV444 ? VIDEO_FORMAT_PYROWAVE_444 : VIDEO_FORMAT_PYROWAVE) |
+                                       (m_Preferences->enableHdr ? VIDEO_FORMAT_PYROWAVE_HDR : 0));
+        break;
     case StreamingPreferences::VCC_FORCE_H264:
         m_SupportedVideoFormats.removeByMask(~VIDEO_FORMAT_MASK_H264);
         break;
@@ -976,6 +997,30 @@ bool Session::validateLaunch(SDL_Window* testWindow)
         return false;
     }
 
+    if (m_Preferences->videoCodecConfig == StreamingPreferences::VCC_FORCE_PYROWAVE) {
+#ifndef HAVE_PYROWAVE
+        emit displayLaunchError(tr("This Moonlight build does not include PyroWave."));
+        return false;
+#else
+        const int modes = m_Computer->serverCodecModeSupport;
+        const int chromaMode = m_Preferences->enableYUV444 ? SCM_PYROWAVE_444 : SCM_PYROWAVE;
+        if (!(modes & chromaMode) || (m_Preferences->enableHdr && !(modes & SCM_PYROWAVE_HDR))) {
+            emit displayLaunchError(tr("The host does not support the selected PyroWave color mode. Enable PyroWave on Sunshine or select another codec."));
+            return false;
+        }
+        if (!LiPyroWaveFrameBudget(m_StreamConfig.bitrate, m_StreamConfig.fps)) {
+            emit displayLaunchError(tr("PyroWave bitrate and frame rate must produce a frame budget between 1 KiB and 3 MiB (up to 2000 Mbps)."));
+            return false;
+        }
+        if (getDecoderAvailability(testWindow, m_Preferences->videoDecoderSelection,
+                                   m_SupportedVideoFormats.first(), m_StreamConfig.width, m_StreamConfig.height,
+                                   m_StreamConfig.fps) != DecoderAvailability::Hardware) {
+            emit displayLaunchError(tr("PyroWave Vulkan decoder initialization failed. Check the GPU/renderer logs or select another codec."));
+            return false;
+        }
+#endif
+    }
+
     if (m_Preferences->absoluteMouseMode && !m_App.isAppCollectorGame) {
         emitLaunchWarning(tr("Your selection to enable remote desktop mouse mode may cause problems in games."));
     }
@@ -1072,7 +1117,7 @@ bool Session::validateLaunch(SDL_Window* testWindow)
         }
     }
 
-    if (m_Preferences->enableHdr) {
+    if (m_Preferences->enableHdr && m_Preferences->videoCodecConfig != StreamingPreferences::VCC_FORCE_PYROWAVE) {
         if (m_Preferences->videoCodecConfig == StreamingPreferences::VCC_FORCE_H264) {
             emitLaunchWarning(tr("HDR is not supported using the H.264 codec."));
             m_SupportedVideoFormats.removeByMask(VIDEO_FORMAT_MASK_10BIT);
@@ -1135,7 +1180,7 @@ bool Session::validateLaunch(SDL_Window* testWindow)
         }
     }
 
-    if (m_Preferences->enableYUV444) {
+    if (m_Preferences->enableYUV444 && m_Preferences->videoCodecConfig != StreamingPreferences::VCC_FORCE_PYROWAVE) {
         if (!(m_Computer->serverCodecModeSupport & SCM_MASK_YUV444)) {
             emitLaunchWarning(tr("Your host PC doesn't support YUV 4:4:4 streaming."));
             m_SupportedVideoFormats.removeByMask(VIDEO_FORMAT_MASK_YUV444);
@@ -1172,7 +1217,7 @@ bool Session::validateLaunch(SDL_Window* testWindow)
         }
     }
 
-    if (m_StreamConfig.width >= 3840) {
+    if (m_StreamConfig.width >= 3840 && m_Preferences->videoCodecConfig != StreamingPreferences::VCC_FORCE_PYROWAVE) {
         // Only allow 4K on GFE 3.x+
         if (m_Computer->gfeVersion.isEmpty() || m_Computer->gfeVersion.startsWith("2.")) {
             emitLaunchWarning(tr("GeForce Experience 3.0 or higher is required for 4K streaming."));

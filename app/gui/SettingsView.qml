@@ -693,7 +693,7 @@ Flickable {
 
                         stepSize: 500
                         from : 500
-                        to: StreamingPreferences.unlockBitrate ? 500000 : 150000
+                        to: StreamingPreferences.videoCodecConfig === StreamingPreferences.VCC_FORCE_PYROWAVE ? 2000000 : (StreamingPreferences.unlockBitrate ? 500000 : 150000)
 
                         snapMode: "SnapOnRelease"
                         width: Math.min(bitrateDesc.implicitWidth, parent.width - (resetBitrateButton.visible ? resetBitrateButton.width + parent.spacing : 0))
@@ -1616,6 +1616,9 @@ Flickable {
                         // where we will match none of the codecs in the list)
                         currentIndex = 0
 
+                        if (StreamingPreferences.isPyroWaveAvailable() && codecListModel.count === 4) {
+                            codecListModel.append({text: "PyroWave", val: StreamingPreferences.VCC_FORCE_PYROWAVE})
+                        }
                         for(var i = 0; i < codecListModel.count; i++) {
                             var el_vcc = codecListModel.get(i).val;
                             if (saved_vcc === el_vcc) {

@@ -310,6 +310,9 @@ StreamCommandLineParser::StreamCommandLineParser()
         {"H.264", StreamingPreferences::VCC_FORCE_H264},
         {"HEVC",  StreamingPreferences::VCC_FORCE_HEVC},
         {"AV1", StreamingPreferences::VCC_FORCE_AV1},
+#ifdef HAVE_PYROWAVE
+        {"PyroWave", StreamingPreferences::VCC_FORCE_PYROWAVE},
+#endif
     };
     m_VideoDecoderMap = {
         {"auto",     StreamingPreferences::VDS_AUTO},
@@ -414,8 +417,10 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
     // Resolve --bitrate option
     if (parser.isSet("bitrate")) {
         preferences->bitrateKbps = parser.getIntOption("bitrate");
-        if (!inRange(preferences->bitrateKbps, 500, 500000)) {
-            fprintf(stderr, "Warning: Bitrate is out of the supported range (500 - 500000 Kbps). Performance may suffer!\n");
+        if (!inRange(preferences->bitrateKbps, 500,
+                     (parser.isSet("video-codec") ? parser.getChoiceOptionValue("video-codec") == "PyroWave" :
+                      preferences->videoCodecConfig == StreamingPreferences::VCC_FORCE_PYROWAVE) ? 2000000 : 500000)) {
+            fprintf(stderr, "Warning: Bitrate is out of the supported range for the selected codec. Performance may suffer!\n");
         }
     } else if (displaySet || parser.isSet("fps")) {
         preferences->bitrateKbps = preferences->getDefaultBitrate(
