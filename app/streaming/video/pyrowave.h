@@ -70,6 +70,7 @@ private:
     bool m_OverlayAttached = false;
     uint64_t m_EnqueueTime = 0;
     uint64_t m_LastStatsTime = 0;
+    uint64_t m_LastGpuStatsLogTime = 0;
     double m_GpuDequantMs = 0.0;
     double m_GpuIdwtMs = 0.0;
     VIDEO_STATS m_ActiveVideoStats = {};

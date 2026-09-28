@@ -500,6 +500,14 @@ bool PyroWaveVideoDecoder::decodeFrame(const std::vector<uint32_t>& bytes, size_
     if (decodeStart - m_LastStatsTime >= 1000000) {
         pyrowave_device_report_performance_stats(m_Device, collectPerformanceStat, this, true);
         m_LastStatsTime = decodeStart;
+        if ((m_GpuDequantMs > 0.0 || m_GpuIdwtMs > 0.0) &&
+            decodeStart - m_LastGpuStatsLogTime >= 5000000) {
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                        "PyroWave GPU decode (%s path): dequant %.2f ms, iDWT %.2f ms",
+                        m_FragmentPath ? "fragment" : "compute",
+                        m_GpuDequantMs, m_GpuIdwtMs);
+            m_LastGpuStatsLogTime = decodeStart;
+        }
     }
     return true;
 }
