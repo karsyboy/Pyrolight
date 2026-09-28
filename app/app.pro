@@ -546,9 +546,9 @@ unix:!macx: {
 }
 win32 {
     RC_ICONS = moonlight.ico
-    QMAKE_TARGET_COMPANY = Moonlight Game Streaming Project
-    QMAKE_TARGET_DESCRIPTION = Moonlight Game Streaming Client
-    QMAKE_TARGET_PRODUCT = Moonlight
+    QMAKE_TARGET_COMPANY = Moonlight Qt PyroWave contributors
+    QMAKE_TARGET_DESCRIPTION = Moonlight Qt client with PyroWave support
+    QMAKE_TARGET_PRODUCT = Moonlight Qt PyroWave
 
     CONFIG -= embed_manifest_exe
     QMAKE_LFLAGS += /MANIFEST:embed /MANIFESTINPUT:$${PWD}/Moonlight.exe.manifest
@@ -578,15 +578,32 @@ macx {
     }
 }
 
-VERSION = "$$cat(version.txt)"
-DEFINES += VERSION_STR=\\\"$$cat(version.txt)\\\"
+CI_VERSION = $$(CI_VERSION)
+isEmpty(CI_VERSION) {
+    VERSION = "$$cat(version.txt)"
+} else {
+    VERSION = "$$CI_VERSION"
+}
+DEFINES += VERSION_STR=\\\"$$VERSION\\\"
 
 # Explicit opt-in, reproducible standalone dependency (see docs/pyrowave.md).
 enable-pyrowave {
-    !linux: error("PyroWave currently supports Linux only")
     !libplacebo: error("PyroWave requires the libplacebo Vulkan renderer")
-    !packagesExist("pyrowave-shared = 0.7.0"): error("PyroWave requires patched standalone API 0.7.0")
-    PKGCONFIG += pyrowave-shared
+
+    win32 {
+        isEmpty(PYROWAVE_PREFIX): error("Set PYROWAVE_PREFIX to the installed PyroWave 0.7.0 C API")
+        !exists($$PYROWAVE_PREFIX/include/pyrowave/pyrowave.h): error("PyroWave header not found under PYROWAVE_PREFIX")
+        !exists($$PYROWAVE_PREFIX/lib/pyrowave-shared.lib): error("PyroWave import library not found under PYROWAVE_PREFIX")
+        INCLUDEPATH += $$PYROWAVE_PREFIX/include
+        LIBS += -L$$PYROWAVE_PREFIX/lib -lpyrowave-shared
+    } else:linux {
+        !packagesExist("pyrowave-shared = 0.7.0"): error("PyroWave requires patched standalone API 0.7.0")
+        PKGCONFIG += pyrowave-shared
+        INCLUDEPATH += $$system(pkg-config --variable=prefix pyrowave-shared)/include
+    } else {
+        error("PyroWave is supported by this fork on Windows and Linux only")
+    }
+
     DEFINES += HAVE_PYROWAVE
     SOURCES += streaming/video/pyrowave.cpp
     HEADERS += streaming/video/pyrowave.h

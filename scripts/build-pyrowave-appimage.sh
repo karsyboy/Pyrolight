@@ -23,6 +23,8 @@ PYROWAVE_PREFIX=${PYROWAVE_PREFIX:-"$SOURCE_ROOT/build/pyrowave-appimage-prefix"
 if [ ! -d "$PYROWAVE_SOURCE/Granite" ]; then
   (cd "$PYROWAVE_SOURCE" && ./checkout_granite.sh)
 fi
+[ "$(git -C "$PYROWAVE_SOURCE/Granite" rev-parse HEAD 2>/dev/null)" = "1b2d1801d2910fb09ebcded2f0bb3a3a781103b5" ] || \
+  fail "PyroWave's pinned Granite checkout is missing or incorrect"
 
 cmake -S "$PYROWAVE_SOURCE" -B "$PYROWAVE_BUILD" \
   -DCMAKE_BUILD_TYPE=Release \
@@ -31,6 +33,8 @@ cmake -S "$PYROWAVE_SOURCE" -B "$PYROWAVE_BUILD" \
   -DPYROWAVE_UTILS=OFF
 cmake --build "$PYROWAVE_BUILD" -j"$(nproc)"
 cmake --install "$PYROWAVE_BUILD"
+mkdir -p "$PYROWAVE_PREFIX/share/licenses/pyrowave"
+cp "$PYROWAVE_SOURCE/LICENSE" "$PYROWAVE_PREFIX/share/licenses/pyrowave/LICENSE"
 
 export PYROWAVE_PREFIX
 cd "$SOURCE_ROOT"

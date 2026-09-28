@@ -1,7 +1,7 @@
 #pragma once
 #include "decoder.h"
 #include "ffmpeg-renderers/plvk.h"
-#include <pyrowave.h>
+#include <pyrowave/pyrowave.h>
 #include <memory>
 #include <mutex>
 #include <vector>

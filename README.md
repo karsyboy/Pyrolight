@@ -1,114 +1,159 @@
-# Moonlight PC
+# Moonlight Qt PyroWave
 
-[Moonlight PC](https://moonlight-stream.org) is an open source PC client for NVIDIA GameStream and [Sunshine](https://github.com/LizardByte/Sunshine).
+**Moonlight Qt PyroWave is a Moonlight Qt fork with PyroWave support.** It keeps
+Moonlight's low-latency game-streaming client and adds an explicitly selectable
+PyroWave video path for compatible Sunshine hosts.
 
-Moonlight also has mobile versions for [Android](https://github.com/moonlight-stream/moonlight-android) and [iOS](https://github.com/moonlight-stream/moonlight-ios).
+This is an independent community fork. It is not an official Moonlight or
+PyroWave project.
 
-You can follow development on our [Discord server](https://moonlight-stream.org/discord) and help translate Moonlight into your language on [Weblate](https://hosted.weblate.org/projects/moonlight/moonlight-qt/).
+## Why this fork exists
 
- [![Build](https://img.shields.io/github/actions/workflow/status/moonlight-stream/moonlight-qt/build.yml?branch=master)](https://github.com/moonlight-stream/moonlight-qt/actions/workflows/build.yml?query=branch%3Amaster)
- [![Downloads](https://img.shields.io/github/downloads/moonlight-stream/moonlight-qt/total)](https://github.com/moonlight-stream/moonlight-qt/releases)
- [![Translation Status](https://hosted.weblate.org/widgets/moonlight/-/moonlight-qt/svg-badge.svg)](https://hosted.weblate.org/projects/moonlight/moonlight-qt/)
+[PyroWave](https://github.com/Themaister/pyrowave) is an intra-only video codec
+designed for very low GPU encode/decode latency on high-bandwidth networks.
+Upstream Moonlight Qt does not include this codec, so this repository maintains
+the client integration and release packaging needed to use it.
 
-## Features
- - Hardware accelerated video decoding on Windows, Mac, and Linux
- - H.264, HEVC, and AV1 codec support (AV1 requires Sunshine and a supported host GPU)
- - YUV 4:4:4 support (Sunshine only)
- - HDR streaming support
- - 7.1 surround sound audio support
- - 10-point multitouch support (Sunshine only)
- - Gamepad support with force feedback and motion controls for up to 16 players
- - Support for both pointer capture (for games) and direct mouse control (for remote desktop)
- - Support for passing system-wide keyboard shortcuts like Alt+Tab to the host
- 
+The ordinary H.264, HEVC, and AV1 Moonlight paths remain available. PyroWave is
+never selected automatically.
+
+## PyroWave support
+
+The client exposes **PyroWave** in the video codec setting when its Vulkan
+runtime probe succeeds. The implementation:
+
+- decodes on the GPU through the patched PyroWave 0.7 C API;
+- shares the Vulkan device and GPU-local image planes with Moonlight's
+  libplacebo renderer, without decoded-pixel CPU staging;
+- supports YUV 4:2:0 and 4:4:4; and
+- supports SDR and PQ/BT.2020 HDR using Moonlight's existing HDR controls and
+  Sunshine mastering metadata.
+
+See [docs/pyrowave.md](docs/pyrowave.md) for the integration details, pinned
+dependency revision, limits, and developer test procedure.
+
+## Supported platforms
+
+This fork publishes and maintains:
+
+- Windows 10 or later, x64: installer and portable ZIP
+- Linux, x86_64: AppImage
+
+The source tree retains shared upstream platform code, but this project does
+not publish macOS, Steam Link, ARM, Snap, Flatpak, or distribution packages.
+
 ## Downloads
-- [Windows, macOS, and Steam Link](https://github.com/moonlight-stream/moonlight-qt/releases)
-- [Snap (for Ubuntu-based Linux distros)](https://snapcraft.io/moonlight)
-- [Flatpak (for other Linux distros)](https://flathub.org/apps/details/com.moonlight_stream.Moonlight)
-- [AppImage](https://github.com/moonlight-stream/moonlight-qt/releases)
-- [Raspberry Pi 4 and 5](https://github.com/moonlight-stream/moonlight-docs/wiki/Installing-Moonlight-Qt-on-Raspberry-Pi-4)
-- [Generic ARM 32-bit and 64-bit Debian packages](https://github.com/moonlight-stream/moonlight-docs/wiki/Installing-Moonlight-Qt-on-ARM%E2%80%90based-Single-Board-Computers) (not for Raspberry Pi)
-- [Experimental RISC-V Debian packages](https://github.com/moonlight-stream/moonlight-docs/wiki/Installing-Moonlight-Qt-on-RISC%E2%80%90V-Single-Board-Computers)
-- [NVIDIA Jetson and Nintendo Switch (Ubuntu L4T)](https://github.com/moonlight-stream/moonlight-docs/wiki/Installing-Moonlight-Qt-on-Linux4Tegra-(L4T)-Ubuntu)
 
-### Nightly Builds
-- [Downloads](https://nightly.link/moonlight-stream/moonlight-qt/workflows/build/master)
+Download tagged builds from this repository's
+[GitHub Releases](https://github.com/karsyboy/moonlight-qt-pyrowave/releases).
+Release assets include the project name, tag, operating system, and
+architecture. `SHA256SUMS` is attached to each release.
 
-#### Special Thanks
+## Installation
 
-[![Hosted By: Cloudsmith](https://img.shields.io/badge/OSS%20hosting%20by-cloudsmith-blue?logo=cloudsmith&style=flat-square)](https://cloudsmith.com)
+### Windows
 
-Hosting for Moonlight's Debian and L4T package repositories is graciously provided for free by [Cloudsmith](https://cloudsmith.com).
+Download the `windows-x64-installer.exe` asset and run it. To avoid installing,
+download the `windows-x64-portable.zip` asset, extract it, and run
+`Moonlight.exe`.
 
-## Building
+### Linux
 
-### Windows Build Requirements
-* Qt 6.11 SDK or later (earlier versions may work but are not officially supported)
-* [Visual Studio 2026](https://visualstudio.microsoft.com/downloads/) (Community edition is fine)
-* Select **MSVC** option during Qt installation. MinGW is not supported.
-* [7-Zip](https://www.7-zip.org/) (only if building installers for non-development PCs)
-* Graphics Tools (only if running debug builds)
-  * Install "Graphics Tools" in the Optional Features page of the Windows Settings app.
-  * Alternatively, run `dism /online /add-capability /capabilityname:Tools.Graphics.DirectX~~~~0.0.1.0` and reboot.
+Download the `linux-x86_64.AppImage` asset, make it executable, and run it:
 
-### macOS Build Requirements
-* Qt 6.11 SDK or later (earlier versions may work but are not officially supported)
-* Xcode 15 or later (earlier versions may work but are not officially supported)
-* [create-dmg](https://github.com/sindresorhus/create-dmg) (only if building DMGs for use on non-development Macs)
+```sh
+chmod +x moonlight-qt-pyrowave-v*-linux-x86_64.AppImage
+./moonlight-qt-pyrowave-v*-linux-x86_64.AppImage
+```
 
-### Linux/Unix Build Requirements
-* Qt 6 is recommended, but Qt 5.12 or later is also supported (replace `qmake6` with `qmake` when using Qt 5).
-* GCC or Clang
-* FFmpeg 4.0 or later
-* Install the required packages:
-  * Debian/Ubuntu:
-    * Base Requirements: `libegl1-mesa-dev libgl1-mesa-dev libopus-dev libsdl2-dev libsdl2-ttf-dev libssl-dev libavcodec-dev libavformat-dev libswscale-dev libva-dev libvdpau-dev libxkbcommon-dev wayland-protocols libdrm-dev`
-    * Qt 6 (Recommended): `qt6-base-dev qt6-declarative-dev libqt6svg6-dev qt6-wayland qml6-module-qtquick-controls qml6-module-qtquick-templates qml6-module-qtquick-layouts qml6-module-qtqml-workerscript qml6-module-qtquick-window qml6-module-qtquick`
-    * Qt 5: `qtbase5-dev qt5-qmake qtdeclarative5-dev qtquickcontrols2-5-dev qml-module-qtquick-controls2 qml-module-qtquick-layouts qml-module-qtquick-window2 qml-module-qtquick2 qtwayland5`
-  * RedHat/Fedora (RPM Fusion repo required):
-    * Base Requirements: `openssl-devel SDL2-devel SDL2_ttf-devel ffmpeg-devel libva-devel libvdpau-devel opus-devel pulseaudio-libs-devel alsa-lib-devel libdrm-devel`
-    * Qt 6 (Recommended): `qt6-qtsvg-devel qt6-qtdeclarative-devel`
-    * Qt 5: `qt5-qtsvg-devel qt5-qtquickcontrols2-devel`
-* Building the Vulkan renderer requires a `libplacebo-dev`/`libplacebo-devel` version of at least v7.349.0 and FFmpeg 6.1 or later.
+## Compatibility and requirements
 
-### Steam Link Build Requirements
-* [Steam Link SDK](https://github.com/ValveSoftware/steamlink-sdk) cloned on your build system
-* STEAMLINK_SDK_PATH environment variable set to the Steam Link SDK path
+For normal Moonlight codecs, use a compatible Sunshine or legacy NVIDIA
+GameStream host as supported by the upstream Moonlight client.
 
-**Steam Link Hardware Limitations**  
-Moonlight builds for Steam Link are subject to hardware limitations of the Steam Link device:
-* Maximum resolution: **1080p (1920x1080)**
-* Maximum framerate: **60 FPS**
-* Maximum video bitrate: **40 Mbps**
-* **HDR streaming is not supported** on the original hardware
+PyroWave additionally requires:
 
-### Docker containers
-If you want to use Docker for building, look at [this repo](https://github.com/cgutman/moonlight-packaging) containing canonical containers
-for different architectures, which handle building deps and extra linking for you.
+- a release from this repository with the PyroWave runtime bundled;
+- a Vulkan 1.3-capable GPU and driver that pass the startup decoder probe;
+- a compatible PyroWave-enabled
+  [Sunshine fork](https://github.com/karsyboy/Sunshine); and
+- a network that can sustain the selected bitrate.
 
-### Build Setup Steps
-1. Install the latest Qt SDK (and optionally, the Qt Creator IDE) from https://www.qt.io/download
-    * You can install Qt via Homebrew on macOS, but you will need to use `brew install qt --with-debug` to be able to create debug builds of Moonlight.
-    * You may also use your Linux distro's package manager for the Qt SDK as long as the packages are Qt 5.12 or later.
-    * This step is not required for building on Steam Link, because the Steam Link SDK includes Qt 5.14.
-2. Download submodules and dependencies
-    * Run `git submodule update --init --recursive` from within `moonlight-qt/`.
-    * On Windows and macOS, you must also run `setup-deps.ps1` (Windows) or `setup-deps.py` (macOS).
-    * Perform these steps each time you pull new changes from the Git repository.
-3. Open the project in Qt Creator or build from qmake on the command line.
-    * To build a binary for use on non-development machines, use the scripts in the `scripts` folder.
-        * For Windows builds, use `scripts\build-arch.bat` and `scripts\generate-bundle.bat`. Execute these scripts from the root of the repository within a Qt command prompt. Ensure  7-Zip binary directory is on your `%PATH%`.
-        * For macOS builds, use `scripts/generate-dmg.sh`. Execute this script from the root of the repository and ensure Qt's `bin` folder is in your `$PATH`.
-        * For Steam Link builds, run `scripts/build-steamlink-app.sh` from the root of the repository.
-    * To build from the command line for development use on macOS or Linux, run `qmake6 moonlight-qt.pro` then `make debug` or `make release`.
-        * The final binary will be placed in `app/moonlight`.
-    * To create an embedded build for a single-purpose device, use `qmake6 "CONFIG+=embedded" moonlight-qt.pro` and build normally.
-        * This build will lack windowed mode, Discord/Help links, and other features that don't make sense on an embedded device.
-        * For platforms with poor GPU performance, add `"CONFIG+=gpuslow"` to prefer direct KMSDRM rendering over GL/Vulkan renderers. Direct KMSDRM rendering can use dedicated YUV/RGB conversion and scaling hardware rather than slower GPU shaders for these operations.
+On the host, enable the PyroWave encoder. In this client, select **PyroWave**
+under video codec and enable HDR or YUV 4:4:4 only when the host and display
+support them. The client accepts up to 2,000,000 Kbps and 240 FPS, subject to an
+encoded-frame budget of 1 KiB to 3 MiB. Unsupported server capability, device,
+build, or frame-budget combinations fail with an error rather than silently
+falling back.
 
-## Contribute
-1. Fork us
-2. Write code
-3. Send Pull Requests
+## Building from source
 
-Check out our [website](https://moonlight-stream.org) for project links and information.
+Initialize this repository first:
+
+```sh
+git clone --recurse-submodules https://github.com/karsyboy/moonlight-qt-pyrowave.git
+cd moonlight-qt-pyrowave
+```
+
+Release builds use PyroWave commit
+`e344479d6c0439e346c788a918ad5645713f7573`, whose standalone C API reports
+version 0.7.0. Do not substitute the incompatible upstream 0.6 API.
+
+### Windows x64
+
+Install Visual Studio 2022, Qt 6.11.2 with the MSVC 2022 x64 kit, CMake, Git
+Bash, and 7-Zip. From a Qt-enabled PowerShell/Git Bash environment:
+
+```powershell
+./setup-deps.ps1 -Architecture x64
+git clone https://github.com/karsyboy/pyrowave.git deps/PyroWave
+git -C deps/PyroWave checkout e344479d6c0439e346c788a918ad5645713f7573
+bash -lc "cd deps/PyroWave && ./checkout_granite.sh"
+cmake -S deps/PyroWave -B build/pyrowave -A x64 `
+  -DCMAKE_BUILD_TYPE=Release `
+  -DCMAKE_INSTALL_PREFIX="$PWD/build/pyrowave-install" `
+  -DPYROWAVE_DEVEL=OFF -DPYROWAVE_UTILS=OFF
+cmake --build build/pyrowave --config Release --parallel
+cmake --install build/pyrowave --config Release
+$env:PYROWAVE_PREFIX = "$PWD/build/pyrowave-install"
+$env:PYROWAVE_SOURCE = "$PWD/deps/PyroWave"
+cmd /c scripts\build-arch.bat Release
+cmd /c scripts\generate-bundle.bat Release
+```
+
+### Linux
+
+Install Qt 6, CMake, Vulkan development tools, FFmpeg, libplacebo, SDL2,
+SDL2_ttf, OpenSSL, Opus, and the VA-API/VDPAU/X11 development packages used by
+your distribution. Build and install the pinned PyroWave C API, add its
+`share/pkgconfig` directory to `PKG_CONFIG_PATH`, then run:
+
+```sh
+qmake6 moonlight-qt.pro CONFIG+=enable-pyrowave
+make -j"$(nproc)" release
+```
+
+For a release-equivalent AppImage environment, follow
+[docs/pyrowave.md](docs/pyrowave.md) and use
+`scripts/build-pyrowave-appimage.sh`.
+
+## Relationship to upstream projects
+
+This project is derived from
+[Moonlight Qt / Moonlight PC](https://github.com/moonlight-stream/moonlight-qt)
+and periodically carries upstream client code. General Moonlight usage and
+troubleshooting documentation remains available from the
+[Moonlight project](https://moonlight-stream.org/).
+
+The codec is derived from
+[Themaister's PyroWave](https://github.com/Themaister/pyrowave). This repository
+integrates a pinned patched revision; it does not claim to be the upstream
+PyroWave project.
+
+## Licensing and attribution
+
+Moonlight Qt PyroWave remains licensed under the
+[GNU General Public License v3](LICENSE), preserving Moonlight's copyright and
+license notices. PyroWave is distributed under its own MIT license, which is
+included with packaged runtime components. Bundled dependencies retain their
+respective licenses and notices.

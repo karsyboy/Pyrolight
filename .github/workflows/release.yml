@@ -1,0 +1,204 @@
+---
+name: Release Moonlight Qt PyroWave
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Resolve version from tag
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.version.outputs.release_tag }}
+      release_version: ${{ steps.version.outputs.release_version }}
+    steps:
+      - name: Validate and export version
+        id: version
+        env:
+          SOURCE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${SOURCE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "Release tags must use vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH.BUILD." >&2
+            exit 1
+          fi
+          echo "release_tag=${SOURCE_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "release_version=${SOURCE_TAG#v}" >> "${GITHUB_OUTPUT}"
+
+  windows:
+    name: Windows x64 installer and portable build
+    needs: version
+    runs-on: windows-2025
+    env:
+      CI_VERSION: ${{ needs.version.outputs.release_version }}
+      PORTABLE_BUILD: 1
+      PYROWAVE_PREFIX: ${{ github.workspace }}\build\pyrowave-install
+      PYROWAVE_SOURCE: ${{ github.workspace }}\deps\PyroWave
+
+    steps:
+      - name: Check out Moonlight Qt PyroWave
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Check out the patched PyroWave API
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: karsyboy/pyrowave
+          ref: e344479d6c0439e346c788a918ad5645713f7573
+          path: deps/PyroWave
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
+        with:
+          version: 6.11.2
+          arch: win64_msvc2022_64
+          cache: true
+          tools: tools_qtcreator_gui
+
+      - name: Download Moonlight Windows dependencies
+        shell: pwsh
+        run: ./setup-deps.ps1 -Architecture x64
+
+      - name: Prepare PyroWave dependencies
+        shell: bash
+        working-directory: deps/PyroWave
+        run: |
+          set -euo pipefail
+          ./checkout_granite.sh
+          test "$(git -C Granite rev-parse HEAD)" = "1b2d1801d2910fb09ebcded2f0bb3a3a781103b5"
+
+      - name: Build and install PyroWave
+        shell: pwsh
+        run: |
+          cmake -S deps/PyroWave -B build/pyrowave `
+            -A x64 `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_INSTALL_PREFIX="$Env:PYROWAVE_PREFIX" `
+            -DPYROWAVE_DEVEL=OFF `
+            -DPYROWAVE_UTILS=OFF
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build/pyrowave --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --install build/pyrowave --config Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Force -Path "$Env:PYROWAVE_PREFIX/share/licenses/pyrowave" | Out-Null
+          Copy-Item deps/PyroWave/LICENSE "$Env:PYROWAVE_PREFIX/share/licenses/pyrowave/LICENSE"
+
+      - name: Build Windows x64 packages
+        shell: cmd
+        run: |
+          set "PATH=%QT_ROOT_DIR%\bin;%PATH%"
+          scripts\build-arch.bat Release
+          if errorlevel 1 exit /b %errorlevel%
+          scripts\generate-bundle.bat Release
+
+      - name: Verify and name Windows release assets
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ needs.version.outputs.release_tag }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = "build/installer-release/MoonlightQtPyroWaveSetup-x64-$Env:CI_VERSION.exe"
+          $portable = "build/installer-x64-release/MoonlightQtPyroWavePortable-x64-$Env:CI_VERSION.zip"
+          $runtime = Get-ChildItem "build/deploy-x64-release" -Filter "*pyrowave-shared*.dll"
+          if (!(Test-Path $installer -PathType Leaf) -or (Get-Item $installer).Length -eq 0) {
+            throw "Expected installer was not produced: $installer"
+          }
+          if (!(Test-Path $portable -PathType Leaf) -or (Get-Item $portable).Length -eq 0) {
+            throw "Expected portable archive was not produced: $portable"
+          }
+          if (!$runtime) {
+            throw "The deployed Windows build does not contain the PyroWave runtime DLL."
+          }
+          $portableListing = 7z l $portable | Out-String
+          if ($LASTEXITCODE -ne 0 -or
+              $portableListing -notmatch 'portable\.dat(\r?\n|$)' -or
+              $portableListing -notmatch 'pyrowave-shared.*\.dll' -or
+              $portableListing -notmatch 'PyroWave-LICENSE\.txt') {
+            throw "The portable archive is missing portable mode, PyroWave, or its license."
+          }
+          New-Item -ItemType Directory -Path release-assets | Out-Null
+          Move-Item $installer "release-assets/moonlight-qt-pyrowave-$Env:RELEASE_TAG-windows-x64-installer.exe"
+          Move-Item $portable "release-assets/moonlight-qt-pyrowave-$Env:RELEASE_TAG-windows-x64-portable.zip"
+
+      - name: Upload Windows release artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
+        with:
+          name: moonlight-qt-pyrowave-${{ needs.version.outputs.release_tag }}-windows-x64
+          path: release-assets/*
+          if-no-files-found: error
+
+  linux:
+    name: Linux x86_64 AppImage
+    needs: version
+    uses: ./.github/workflows/build-appimage.yml
+    with:
+      release_tag: ${{ needs.version.outputs.release_tag }}
+      release_version: ${{ needs.version.outputs.release_version }}
+
+  publish:
+    name: Publish GitHub release
+    needs:
+      - version
+      - windows
+      - linux
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.0
+        with:
+          pattern: moonlight-qt-pyrowave-${{ needs.version.outputs.release_tag }}-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify assets and create checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected=(
+            "moonlight-qt-pyrowave-${{ needs.version.outputs.release_tag }}-windows-x64-installer.exe"
+            "moonlight-qt-pyrowave-${{ needs.version.outputs.release_tag }}-windows-x64-portable.zip"
+            "moonlight-qt-pyrowave-${{ needs.version.outputs.release_tag }}-linux-x86_64.AppImage"
+          )
+          for asset in "${expected[@]}"; do
+            test -s "release-assets/${asset}" || {
+              echo "Missing release asset: ${asset}" >&2
+              exit 1
+            }
+          done
+          cd release-assets
+          sha256sum "${expected[@]}" > SHA256SUMS
+
+      - name: Create or update the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.version.outputs.release_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" release-assets/* --clobber
+          else
+            gh release create "${RELEASE_TAG}" release-assets/* \
+              --verify-tag \
+              --target "${GITHUB_SHA}" \
+              --title "Moonlight Qt PyroWave ${RELEASE_TAG}" \
+              --generate-notes
+          fi

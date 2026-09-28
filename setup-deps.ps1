@@ -1,9 +1,18 @@
+param(
+    [ValidateSet('x64', 'arm64', 'all')]
+    [string]$Architecture = 'all'
+)
+
 $ErrorActionPreference = 'Stop'
 
 $Organization = "moonlight-stream"
 $PrebuiltRepo = "moonlight-qt-deps"
 $TargetDir = Join-Path $PSScriptRoot "libs\windows"
-$Assets = @("windows-x64.zip", "windows-ARM64.zip")
+$Assets = switch ($Architecture) {
+    'x64' { @('windows-x64.zip') }
+    'arm64' { @('windows-ARM64.zip') }
+    default { @('windows-x64.zip', 'windows-ARM64.zip') }
+}
 $Tag = "v18.1"
 
 if (Test-Path $TargetDir) {

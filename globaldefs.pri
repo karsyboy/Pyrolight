@@ -9,6 +9,10 @@ CONFIG(release, debug|release) {
     DEFINES += NDEBUG
 }
 
+# This fork intentionally keeps Moonlight's compatibility-sensitive executable,
+# settings, and application identifiers while presenting its own project identity.
+DEFINES += MOONLIGHT_QT_PYROWAVE
+
 # Enable CFG, EHCont, and CET
 *-msvc {
     QMAKE_CFLAGS += -guard:cf -guard:ehcont

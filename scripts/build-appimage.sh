@@ -52,6 +52,7 @@ if [ -n "${PYROWAVE_PREFIX:-}" ]; then
   PYROWAVE_PREFIX=$(readlink -f "$PYROWAVE_PREFIX")
   [ -f "$PYROWAVE_PREFIX/share/pkgconfig/pyrowave-shared.pc" ] || fail "Invalid PYROWAVE_PREFIX: pyrowave-shared.pc not found"
   [ -f "$PYROWAVE_PREFIX/lib/libpyrowave-shared.so.0" ] || fail "Invalid PYROWAVE_PREFIX: libpyrowave-shared.so.0 not found"
+  [ -f "$PYROWAVE_PREFIX/share/licenses/pyrowave/LICENSE" ] || fail "Invalid PYROWAVE_PREFIX: PyroWave license not found"
   export PKG_CONFIG_PATH="$PYROWAVE_PREFIX/share/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
   QMAKE_CONFIG+=(CONFIG+=enable-pyrowave)
   LINUXDEPLOY_EXTRA_ARGS+=(--library="$PYROWAVE_PREFIX/lib/libpyrowave-shared.so.0")
@@ -68,6 +69,14 @@ echo Deploying to staging directory
 pushd $BUILD_FOLDER
 make install || fail "Make install failed!"
 popd
+
+echo Staging license notices
+LICENSE_DIR=$DEPLOY_FOLDER/usr/share/licenses/moonlight-qt-pyrowave
+mkdir -p "$LICENSE_DIR"
+cp "$SOURCE_ROOT/LICENSE" "$LICENSE_DIR/Moonlight-Qt-PyroWave-LICENSE"
+if [ -n "${PYROWAVE_PREFIX:-}" ]; then
+  cp "$PYROWAVE_PREFIX/share/licenses/pyrowave/LICENSE" "$LICENSE_DIR/PyroWave-LICENSE"
+fi
 
 export QML_SOURCES_PATHS=$SOURCE_ROOT/app/gui
 export QMAKE=qmake6
@@ -138,7 +147,7 @@ pushd $INSTALLER_FOLDER
 # software decoding. The host always provides libva on systems where VA-API is
 # usable, so link against it at runtime instead (the AppRun shim above keeps a
 # bundled last-resort copy for hosts without libva).
-VERSION=$VERSION $LINUXDEPLOY --appdir $DEPLOY_FOLDER \
+VERSION=$VERSION OUTPUT="Moonlight-$VERSION-$(uname -m).AppImage" $LINUXDEPLOY --appdir $DEPLOY_FOLDER \
   --library=/usr/local/lib/libSDL3.so.0 \
   "${LINUXDEPLOY_EXTRA_ARGS[@]}" \
   --plugin qt \

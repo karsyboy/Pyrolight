@@ -162,8 +162,21 @@ set CXXFLAGS=/GL
 set LDFLAGS=/LTCG
 
 echo Configuring the project
+set PYROWAVE_QMAKE_ARGS=
+if defined PYROWAVE_PREFIX (
+    if not exist "%PYROWAVE_PREFIX%\include\pyrowave\pyrowave.h" (
+        echo Invalid PYROWAVE_PREFIX - missing include\pyrowave\pyrowave.h
+        goto Error
+    )
+    if not exist "%PYROWAVE_PREFIX%\lib\pyrowave-shared.lib" (
+        echo Invalid PYROWAVE_PREFIX - missing lib\pyrowave-shared.lib
+        goto Error
+    )
+    set "PYROWAVE_QMAKE_PREFIX=%PYROWAVE_PREFIX:\=/%"
+    set PYROWAVE_QMAKE_ARGS=CONFIG+=enable-pyrowave "PYROWAVE_PREFIX=!PYROWAVE_QMAKE_PREFIX!"
+)
 pushd %BUILD_FOLDER%
-%QMAKE_CMD% %SOURCE_ROOT%\moonlight-qt.pro
+%QMAKE_CMD% %SOURCE_ROOT%\moonlight-qt.pro !PYROWAVE_QMAKE_ARGS!
 if !ERRORLEVEL! NEQ 0 goto Error
 popd
 
@@ -201,7 +214,7 @@ for /r "%BUILD_FOLDER%" %%f in (*.pdb) do (
 )
 copy %SOURCE_ROOT%\libs\windows\lib\%ARCH%\*.pdb %SYMBOLS_FOLDER%
 if !ERRORLEVEL! NEQ 0 goto Error
-7z a %SYMBOLS_FOLDER%\MoonlightDebuggingSymbols-%ARCH%-%VERSION%.zip %SYMBOLS_FOLDER%\*.pdb
+7z a %SYMBOLS_FOLDER%\MoonlightQtPyroWaveDebuggingSymbols-%ARCH%-%VERSION%.zip %SYMBOLS_FOLDER%\*.pdb
 if !ERRORLEVEL! NEQ 0 goto Error
 
 if "%ML_SYMBOL_STORE%" NEQ "" (
@@ -217,7 +230,7 @@ if "%ML_SYMBOL_STORE%" NEQ "" (
 
 if "%ML_SYMBOL_ARCHIVE%" NEQ "" (
     echo Copying PDB ZIP to symbol archive: %ML_SYMBOL_ARCHIVE%
-    copy %SYMBOLS_FOLDER%\MoonlightDebuggingSymbols-%ARCH%-%VERSION%.zip %ML_SYMBOL_ARCHIVE%
+    copy %SYMBOLS_FOLDER%\MoonlightQtPyroWaveDebuggingSymbols-%ARCH%-%VERSION%.zip %ML_SYMBOL_ARCHIVE%
     if !ERRORLEVEL! NEQ 0 goto Error
 ) else (
     if "%MUST_DEPLOY_SYMBOLS%"=="1" (
@@ -228,6 +241,27 @@ if "%ML_SYMBOL_ARCHIVE%" NEQ "" (
 
 echo Copying DLL dependencies
 copy %SOURCE_ROOT%\libs\windows\lib\%ARCH%\*.dll %DEPLOY_FOLDER%
+if !ERRORLEVEL! NEQ 0 goto Error
+
+if defined PYROWAVE_PREFIX (
+    echo Copying PyroWave runtime
+    copy "%PYROWAVE_PREFIX%\bin\*pyrowave-shared*.dll" %DEPLOY_FOLDER%
+    if !ERRORLEVEL! NEQ 0 goto Error
+
+    mkdir %DEPLOY_FOLDER%\licenses
+    set PYROWAVE_LICENSE=
+    if exist "%PYROWAVE_PREFIX%\share\licenses\pyrowave\LICENSE" set "PYROWAVE_LICENSE=%PYROWAVE_PREFIX%\share\licenses\pyrowave\LICENSE"
+    if not defined PYROWAVE_LICENSE if defined PYROWAVE_SOURCE if exist "%PYROWAVE_SOURCE%\LICENSE" set "PYROWAVE_LICENSE=%PYROWAVE_SOURCE%\LICENSE"
+    if not defined PYROWAVE_LICENSE (
+        echo Unable to package the PyroWave license. Set PYROWAVE_SOURCE to the PyroWave source tree.
+        goto Error
+    )
+    copy "!PYROWAVE_LICENSE!" %DEPLOY_FOLDER%\licenses\PyroWave-LICENSE.txt
+    if !ERRORLEVEL! NEQ 0 goto Error
+)
+
+if not exist %DEPLOY_FOLDER%\licenses mkdir %DEPLOY_FOLDER%\licenses
+copy %SOURCE_ROOT%\LICENSE %DEPLOY_FOLDER%\licenses\Moonlight-Qt-PyroWave-LICENSE.txt
 if !ERRORLEVEL! NEQ 0 goto Error
 
 echo Copying AntiHooking.dll
@@ -303,10 +337,12 @@ rem and should not be harvested for inclusion in the full installer
 copy "%VC_REDIST_DLL_PATH%\*.dll" %DEPLOY_FOLDER%
 if !ERRORLEVEL! NEQ 0 goto Error
 
-rem Since we don't publish Windows installers for CI builds, let's use the user profile
-rem location of the regular non-portable version by default. We'll place a file in the
-rem the package to allow the user to rename if they want portable behavior.
-if defined CI_VERSION (
+rem Tagged releases explicitly request a portable settings directory. Other CI builds
+rem use the regular user profile unless portable.dat.inactive is renamed by the user.
+if defined PORTABLE_BUILD (
+    echo. > %DEPLOY_FOLDER%\portable.dat
+    if !ERRORLEVEL! NEQ 0 goto Error
+) else if defined CI_VERSION (
     echo. > %DEPLOY_FOLDER%\portable.dat.inactive
     if !ERRORLEVEL! NEQ 0 goto Error
 ) else (
@@ -315,10 +351,10 @@ if defined CI_VERSION (
     if !ERRORLEVEL! NEQ 0 goto Error
 )
 
-7z a %INSTALLER_FOLDER%\MoonlightPortable-%ARCH%-%VERSION%.zip %DEPLOY_FOLDER%\*
+7z a %INSTALLER_FOLDER%\MoonlightQtPyroWavePortable-%ARCH%-%VERSION%.zip %DEPLOY_FOLDER%\*
 if !ERRORLEVEL! NEQ 0 goto Error
 
-echo Build successful for Moonlight v%VERSION% %ARCH% binaries!
+echo Build successful for Moonlight Qt PyroWave v%VERSION% %ARCH% binaries!
 exit /b 0
 
 :Error

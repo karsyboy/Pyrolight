@@ -1,122 +1,144 @@
 ---
-name: Build - Linux AppImage
-permissions:
-  contents: read
+name: Build Linux AppImage
 
 on:
   workflow_call:
     inputs:
-      ci_version:
+      release_tag:
+        description: Git tag used in the published filename (for example, v1.0.0)
         required: true
         type: string
-      enable_pyrowave:
-        required: false
-        type: boolean
-        default: false
+      release_version:
+        description: Numeric application version derived from the tag (for example, 1.0.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
 
 jobs:
-  build:
-    env:
-      CI_VERSION: ${{ inputs.ci_version }}
+  appimage:
+    name: Linux x86_64 AppImage
     runs-on: ubuntu-22.04
+    env:
+      CI_VERSION: ${{ inputs.release_version }}
+      RELEASE_ASSET: moonlight-qt-pyrowave-${{ inputs.release_tag }}-linux-x86_64.AppImage
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v5
+      - name: Check out Moonlight Qt PyroWave
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          submodules: 'recursive'
+          submodules: recursive
           fetch-depth: 1
+          persist-credentials: false
 
-      - name: Checkout PyroWave
-        if: inputs.enable_pyrowave
-        uses: actions/checkout@v5
+      - name: Check out the patched PyroWave API
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: karsyboy/pyrowave
-          ref: master
+          ref: e344479d6c0439e346c788a918ad5645713f7573
           path: deps/PyroWave
           fetch-depth: 1
+          persist-credentials: false
 
-      - name: Setup environment
+      - name: Install build dependencies
+        shell: bash
         run: |
-          wget -qO - https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo apt-key add -
-          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-1.4.313-jammy.list https://packages.lunarg.com/vulkan/1.4.313/lunarg-vulkan-1.4.313-jammy.list
-          sudo apt update
-          sudo apt install -y qt6-base-dev qt6-declarative-dev libqt6svg6-dev qml6-module-qtquick-controls qml6-module-qtquick-templates qml6-module-qtquick-layouts \
-            qml6-module-qtqml-workerscript qml6-module-qtquick-window qml6-module-qtquick python3-pip nasm libgbm-dev libdrm-dev libfreetype-dev libasound2-dev \
-            libdbus-1-dev libegl1-mesa-dev libgl1-mesa-dev libgles2-mesa-dev libglu1-mesa-dev libibus-1.0-dev libpulse-dev libudev-dev libx11-dev libxcursor-dev \
-            libxext-dev libxi-dev libxinerama-dev libxkbcommon-dev libxrandr-dev libxss-dev libxt-dev libxv-dev libxxf86vm-dev libxcb-dri3-dev libx11-xcb-dev \
-            libxfixes-dev libxtst-dev wayland-protocols libopus-dev libvdpau-dev libgl-dev libpipewire-0.3-dev liburing-dev vulkan-sdk cmake
-          sudo pip3 install meson
-          mkdir -p dep_root/{bin,include,lib}
-          echo "DEP_ROOT=$PWD/dep_root" >> "${GITHUB_ENV}"
-          echo "$PWD/dep_root/bin" >> "${GITHUB_PATH}"
+          set -euo pipefail
+          curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
+            | gpg --dearmor \
+            | sudo tee /usr/share/keyrings/lunarg-vulkan.gpg >/dev/null
+          echo 'deb [signed-by=/usr/share/keyrings/lunarg-vulkan.gpg] https://packages.lunarg.com/vulkan/1.4.313 jammy main' \
+            | sudo tee /etc/apt/sources.list.d/lunarg-vulkan.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install --yes \
+            qt6-base-dev qt6-declarative-dev libqt6svg6-dev \
+            qml6-module-qtquick-controls qml6-module-qtquick-templates \
+            qml6-module-qtquick-layouts qml6-module-qtqml-workerscript \
+            qml6-module-qtquick-window qml6-module-qtquick python3-pip nasm \
+            libgbm-dev libdrm-dev libfreetype-dev libasound2-dev libdbus-1-dev \
+            libegl1-mesa-dev libgl1-mesa-dev libgles2-mesa-dev libglu1-mesa-dev \
+            libibus-1.0-dev libpulse-dev libudev-dev libx11-dev libxcursor-dev \
+            libxext-dev libxi-dev libxinerama-dev libxkbcommon-dev libxrandr-dev \
+            libxss-dev libxt-dev libxv-dev libxxf86vm-dev libxcb-dri3-dev \
+            libx11-xcb-dev libxfixes-dev libxtst-dev wayland-protocols libopus-dev \
+            libvdpau-dev libgl-dev libpipewire-0.3-dev liburing-dev vulkan-sdk cmake
+          python3 -m pip install --user meson
+          mkdir -p dep_root/bin
+          echo "$(python3 -m site --user-base)/bin" >> "${GITHUB_PATH}"
+          echo "${PWD}/dep_root/bin" >> "${GITHUB_PATH}"
 
-      - name: Checkout SDL3
-        uses: actions/checkout@v5
+      - name: Check out SDL3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: libsdl-org/SDL
           ref: ddba673cddfa79ce798eca5ba402e0f1a2a2a243
           path: deps/SDL
+          persist-credentials: false
 
       - name: Build SDL3
         working-directory: deps/SDL
         run: |
           cmake -DSDL_KMSDRM=OFF -DSDL_TEST_LIBRARY=OFF -DSDL_INSTALL_DOCS=OFF -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON -S . -B build
-          cmake --build build -j
+          cmake --build build --parallel
           sudo cmake --install build
 
-      - name: Checkout sdl2-compat
-        uses: actions/checkout@v5
+      - name: Check out sdl2-compat
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: libsdl-org/sdl2-compat
           ref: release-2.32.70
           path: deps/sdl2-compat
+          persist-credentials: false
 
       - name: Build sdl2-compat
         working-directory: deps/sdl2-compat
         run: |
           cmake -DSDL2COMPAT_TESTS=OFF -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON -S . -B build
-          cmake --build build -j
+          cmake --build build --parallel
           sudo cmake --install build
 
-      - name: Checkout SDL_ttf
-        uses: actions/checkout@v5
+      - name: Check out SDL_ttf
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: libsdl-org/SDL_ttf
           ref: a883e490e30fb44a5336ea3dcb990c6982c5216f
           path: deps/SDL_ttf
-          submodules: 'recursive'
+          submodules: recursive
+          persist-credentials: false
 
       - name: Build SDL_ttf
         working-directory: deps/SDL_ttf
         run: |
           ./autogen.sh
           ./configure
-          make -j$(nproc)
+          make -j"$(nproc)"
           sudo make install
 
-      - name: Checkout libva
-        uses: actions/checkout@v5
+      - name: Check out libva
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: intel/libva
           ref: 2.24.1
           path: deps/libva
+          persist-credentials: false
 
       - name: Build libva
         working-directory: deps/libva
         run: |
           ./autogen.sh
           ./configure --enable-x11=yes --enable-glx=no --enable-drm=no --enable-wayland=no
-          make -j$(nproc)
+          make -j"$(nproc)"
           sudo make install
 
-      - name: Checkout libplacebo
-        uses: actions/checkout@v5
+      - name: Check out libplacebo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: haasn/libplacebo
           ref: e2972fdd09adacd383656738d7d280f0cd84a761
           path: deps/libplacebo
-          submodules: 'recursive'
+          submodules: recursive
+          persist-credentials: false
 
       - name: Build libplacebo
         working-directory: deps/libplacebo
@@ -129,21 +151,20 @@ jobs:
       - name: Build dav1d
         working-directory: deps
         env:
-          DAV1D_VER: 1.5.4
+          DAV1D_VERSION: 1.5.4
         run: |
-          git clone --branch $DAV1D_VER --depth 1 https://code.videolan.org/videolan/dav1d.git
-          pushd dav1d
-          meson setup build -Ddefault_library=static -Dbuildtype=release -Denable_tools=false -Denable_tests=false
-          ninja -C build
-          sudo ninja install -C build
-          popd
+          git clone --branch "${DAV1D_VERSION}" --depth 1 https://code.videolan.org/videolan/dav1d.git
+          meson setup dav1d/build dav1d -Ddefault_library=static -Dbuildtype=release -Denable_tools=false -Denable_tests=false
+          ninja -C dav1d/build
+          sudo ninja install -C dav1d/build
 
-      - name: Checkout FFmpeg
-        uses: actions/checkout@v5
+      - name: Check out FFmpeg
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: FFmpeg/FFmpeg
           ref: n9.0.2
           path: deps/FFmpeg
+          persist-credentials: false
 
       - name: Build FFmpeg
         working-directory: deps/FFmpeg
@@ -152,37 +173,46 @@ jobs:
             --enable-avcodec --enable-avformat --enable-swscale \
             --enable-decoder=h264 --enable-decoder=hevc --enable-decoder=av1 \
             --enable-vaapi --enable-hwaccel=h264_vaapi --enable-hwaccel=hevc_vaapi --enable-hwaccel=av1_vaapi \
-            --enable-vdpau --enable-hwaccel=h264_vdpau  --enable-hwaccel=hevc_vdpau --enable-hwaccel=av1_vdpau \
+            --enable-vdpau --enable-hwaccel=h264_vdpau --enable-hwaccel=hevc_vdpau --enable-hwaccel=av1_vdpau \
             --enable-libdrm --enable-vulkan --enable-hwaccel=h264_vulkan --enable-hwaccel=hevc_vulkan --enable-hwaccel=av1_vulkan \
             --enable-libdav1d --enable-decoder=libdav1d
-          make -j$(nproc)
+          make -j"$(nproc)"
           sudo make install
 
       - name: Install linuxdeploy
         working-directory: dep_root/bin
         run: |
-          wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
-          wget https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          curl --fail --location --remote-name https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage
+          curl --fail --location --remote-name https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/1-alpha-20250213-1/linuxdeploy-plugin-qt-x86_64.AppImage
+          echo 'c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d  linuxdeploy-x86_64.AppImage' | sha256sum --check --strict
+          echo '15106be885c1c48a021198e7e1e9a48ce9d02a86dd0a1848f00bdbf3c1c92724  linuxdeploy-plugin-qt-x86_64.AppImage' | sha256sum --check --strict
           chmod +x linuxdeploy*.AppImage
 
-      - name: Build Binaries
-        if: inputs.enable_pyrowave == false
-        run: |
-          sudo ldconfig
-          scripts/build-appimage.sh
-
-      - name: Build PyroWave Binaries
-        if: inputs.enable_pyrowave
+      - name: Build the PyroWave AppImage
         env:
           PYROWAVE_SOURCE: ${{ github.workspace }}/deps/PyroWave
         run: |
           sudo ldconfig
           scripts/build-pyrowave-appimage.sh
 
-      - name: Upload Binaries
-        uses: actions/upload-artifact@v6
+      - name: Verify and name the release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_asset="build/installer-release/Moonlight-${CI_VERSION}-x86_64.AppImage"
+          test -s "${source_asset}"
+          chmod +x "${source_asset}"
+          "${source_asset}" --appimage-extract >/dev/null
+          readelf -d squashfs-root/usr/bin/moonlight | grep -F 'libpyrowave-shared.so.0'
+          find squashfs-root -type f -name 'libpyrowave-shared.so*' -print -quit | grep -F 'libpyrowave-shared.so'
+          test -s squashfs-root/usr/share/licenses/moonlight-qt-pyrowave/Moonlight-Qt-PyroWave-LICENSE
+          test -s squashfs-root/usr/share/licenses/moonlight-qt-pyrowave/PyroWave-LICENSE
+          mv "${source_asset}" "build/installer-release/${RELEASE_ASSET}"
+
+      - name: Upload Linux release artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
         with:
-          name: Moonlight-LinuxAppImage-${{ env.CI_VERSION }}
-          path: build/installer-release/Moonlight-${{ env.CI_VERSION }}-x86_64.AppImage
+          name: moonlight-qt-pyrowave-${{ inputs.release_tag }}-linux-x86_64
+          path: build/installer-release/${{ env.RELEASE_ASSET }}
           compression-level: 0
           if-no-files-found: error
