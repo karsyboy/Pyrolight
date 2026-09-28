@@ -120,7 +120,9 @@ jobs:
           $portable = "build/installer-x64-release/MoonlightQtPyroWavePortable-x64-$Env:CI_VERSION.zip"
           $runtime = Get-ChildItem "build/deploy-x64-release" -Filter "*pyrowave-shared*.dll"
           if (!(Test-Path $installer -PathType Leaf) -or (Get-Item $installer).Length -eq 0) {
-            throw "Expected installer was not produced: $installer"
+            $candidates = Get-ChildItem build -Recurse -File -Filter "*.exe" |
+              Select-Object -ExpandProperty FullName
+            throw "Expected installer was not produced: $installer. EXE candidates: $($candidates -join ', ')"
           }
           if (!(Test-Path $portable -PathType Leaf) -or (Get-Item $portable).Length -eq 0) {
             throw "Expected portable archive was not produced: $portable"
