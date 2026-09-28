@@ -101,7 +101,7 @@ version 0.7.0. Do not substitute the incompatible upstream 0.6 API.
 
 ### Windows x64
 
-Install Visual Studio 2022, Qt 6.11.2 with the MSVC 2022 x64 kit, CMake, Git
+Install Visual Studio 2022, Qt 6.10.2 with the MSVC 2022 x64 kit, CMake, Git
 Bash, and 7-Zip. From a Qt-enabled PowerShell/Git Bash environment:
 
 ```powershell

@@ -143,20 +143,30 @@ jobs:
       - name: Build libplacebo
         working-directory: deps/libplacebo
         run: |
+          set -euo pipefail
           git apply ../../app/deploy/linux/appimage/*.patch
           meson setup build -Dvulkan=enabled -Dopengl=disabled -Ddemos=false
           ninja -C build
-          sudo ninja install -C build
+          # Meson is installed in the runner user's Python site. Running the
+          # Ninja install target under sudo disables that site and makes the
+          # generated Meson entry point fail to import mesonbuild. Stage the
+          # install as the runner user, then copy it into /usr/local as root.
+          meson install -C build --no-rebuild --destdir "${PWD}/install-root"
+          test -d "${PWD}/install-root/usr/local"
+          sudo cp -a "${PWD}/install-root/usr/local/." /usr/local/
 
       - name: Build dav1d
         working-directory: deps
         env:
           DAV1D_VERSION: 1.5.4
         run: |
+          set -euo pipefail
           git clone --branch "${DAV1D_VERSION}" --depth 1 https://code.videolan.org/videolan/dav1d.git
           meson setup dav1d/build dav1d -Ddefault_library=static -Dbuildtype=release -Denable_tools=false -Denable_tests=false
           ninja -C dav1d/build
-          sudo ninja install -C dav1d/build
+          meson install -C dav1d/build --no-rebuild --destdir "${PWD}/dav1d-install-root"
+          test -d "${PWD}/dav1d-install-root/usr/local"
+          sudo cp -a "${PWD}/dav1d-install-root/usr/local/." /usr/local/
 
       - name: Check out FFmpeg
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
