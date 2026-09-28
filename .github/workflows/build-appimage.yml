@@ -32,7 +32,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: karsyboy/pyrowave
-          ref: pyrowave-hdr-444
+          ref: master
           path: deps/PyroWave
           fetch-depth: 1
 
