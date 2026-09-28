@@ -35,7 +35,7 @@ private:
     bool decodeFrame(const std::vector<uint32_t>& bytes, size_t size,
                      uint64_t* decodeTimeUs = nullptr, uint64_t* renderTimeUs = nullptr,
                      bool rendererReady = false);
-    void renderPendingFrame();
+    void renderPendingFrame(bool rendererReady);
     void renderLoop();
     void recycleFrame(std::vector<uint32_t>& frame);
     void releasePlanes(uint64_t value);

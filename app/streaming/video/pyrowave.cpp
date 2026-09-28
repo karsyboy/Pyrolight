@@ -1,6 +1,7 @@
 #include "pyrowave.h"
 #include <PyroWave.h>
 #include "streaming/session.h"
+#include "streaming/streamutils.h"
 #include <QtEndian>
 #include <cstring>
 #include <cstdio>
@@ -150,8 +151,14 @@ bool PyroWaveVideoDecoder::initialize(PDECODER_PARAMETERS params)
             return false;
         }
     }
-    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "Native PyroWave Vulkan decoder: %dx%d, %s, %s", m_Width, m_Height,
-                m_Format & VIDEO_FORMAT_PYROWAVE_444 ? "4:4:4" : "4:2:0", m_Format & VIDEO_FORMAT_PYROWAVE_HDR ? "HDR" : "SDR");
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                "Native PyroWave Vulkan decoder: %dx%d@%d, %s, %s; display %d Hz, V-sync %s, frame pacing %s",
+                m_Width, m_Height, params->frameRate,
+                m_Format & VIDEO_FORMAT_PYROWAVE_444 ? "4:4:4" : "4:2:0",
+                m_Format & VIDEO_FORMAT_PYROWAVE_HDR ? "HDR" : "SDR",
+                StreamUtils::getDisplayRefreshRate(m_Window),
+                params->enableVsync ? "on" : "off",
+                params->enableFramePacing ? "on" : "off");
     return true;
 }
 
@@ -242,9 +249,9 @@ void PyroWaveVideoDecoder::updatePerformanceOverlay(const VIDEO_STATS& stats)
             "Frames dropped by your network connection: %.2f%%\n"
             "Frames dropped by the client frame queue: %.2f%%\n"
             "Average network latency: %s\n"
-            "Average decoding time: %.2f ms\n"
+            "Average decode submission time: %.2f ms\n"
             "Average frame queue delay: %.2f ms\n"
-            "Average rendering time: %.2f ms\n",
+            "Average presentation wait + render submission time: %.2f ms\n",
             networkDropPercent, clientDropPercent, rtt,
             double(stats.totalDecodeTimeUs) / 1000.0 / stats.decodedFrames,
             double(stats.totalPacerTimeUs) / 1000.0 / stats.renderedFrames,
@@ -456,7 +463,7 @@ void PyroWaveVideoDecoder::recycleFrame(std::vector<uint32_t>& frame)
     if (frame.capacity() > m_Spare.capacity()) m_Spare.swap(frame);
 }
 
-void PyroWaveVideoDecoder::renderPendingFrame()
+void PyroWaveVideoDecoder::renderPendingFrame(bool rendererReady)
 {
     std::vector<uint32_t> frame;
     VIDEO_STATS overlayStats {};
@@ -476,11 +483,10 @@ void PyroWaveVideoDecoder::renderPendingFrame()
     const uint64_t processingStart = LiGetMicroseconds();
     uint64_t decodeTimeUs = 0;
     uint64_t renderTimeUs = 0;
-    if (!decodeFrame(frame, size, &decodeTimeUs, &renderTimeUs, true)) {
+    if (!decodeFrame(frame, size, &decodeTimeUs, &renderTimeUs, rendererReady)) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Rejected incomplete/invalid PyroWave frame or GPU operation failed");
-        // waitToRender() may have acquired a swapchain frame. Submit it so the
-        // next iteration cannot remain blocked behind an invalid input frame.
-        m_Renderer->cleanupRenderContext();
+        // The synchronous probe path may already own a swapchain frame.
+        if (rendererReady) m_Renderer->cleanupRenderContext();
         if (pl_gpu_is_failed(m_Renderer->getVulkan()->gpu)) {
             SDL_Event event {}; event.type = SDL_RENDER_DEVICE_RESET; SDL_PushEvent(&event);
         }
@@ -514,15 +520,12 @@ void PyroWaveVideoDecoder::renderLoop()
             if (m_Stopping) break;
         }
 
-        // Wait for presentation capacity before latching the mailbox. Frames
-        // arriving during the wait replace stale work instead of being decoded
-        // and then held until the display is ready.
-        m_Renderer->waitToRender();
-        {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            if (m_Stopping) break;
-        }
-        renderPendingFrame();
+        // Submit decode before waiting for presentation capacity. The timeline
+        // dependency still orders this decode after the preceding render, but
+        // the GPU can execute it while this thread waits for the next swapchain
+        // frame. Waiting first creates a decode -> present -> decode bubble that
+        // is especially costly at 120 Hz and above.
+        renderPendingFrame(false);
     }
     m_Renderer->cleanupRenderContext();
 }
@@ -533,7 +536,7 @@ void PyroWaveVideoDecoder::renderFrameOnMainThread()
     // remains for renderer probing and the GPU smoke test.
     if (m_Threaded) return;
     m_Renderer->waitToRender();
-    renderPendingFrame();
+    renderPendingFrame(true);
 }
 
 bool PyroWaveVideoDecoder::notifyWindowChanged(PWINDOW_STATE_CHANGE_INFO info)

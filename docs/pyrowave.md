@@ -50,8 +50,10 @@ PyroWave dependency and the bundled shared library are present.
 The decoder borrows libplacebo's Vulkan instance, device, graphics queue, and
 queue-lock callbacks. Three GPU-local R16 UNORM planes are exchanged through
 explicit timeline-semaphore ownership. Decode and rendering submissions run on
-a dedicated high-priority render thread, which waits for presentation capacity
-before latching the newest encoded frame. libplacebo receives the stream's
+a dedicated high-priority render thread. It latches the newest encoded frame
+and submits its GPU decode before waiting for presentation capacity, allowing
+decode work to overlap the swapchain wait without buffering another frame.
+libplacebo receives the stream's
 native Rec.709 or PQ/BT.2020 metadata, full/limited range, chroma siting, and
 Sunshine mastering metadata. Decoded pixels are not staged through CPU memory.
 
