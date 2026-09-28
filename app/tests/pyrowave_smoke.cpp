@@ -18,6 +18,9 @@ public:
         params.testOnly = true;
         REQUIRE(decoder.initialize(&params));
         REQUIRE(decoder.getDecoderCapabilities() & CAPABILITY_DIRECT_SUBMIT);
+        decoder.collectPerformanceStat(&decoder, "Dequant: 1.250 ms per frame");
+        decoder.collectPerformanceStat(&decoder, "iDWT: 2.500 ms per frame");
+        REQUIRE(decoder.m_GpuDequantMs == 1.25 && decoder.m_GpuIdwtMs == 2.5);
         if (const auto directory = std::getenv("SUNSHINE_TEST_PYROWAVE_OUTPUT")) {
             for (int index = 0; index < 16; ++index) {
                 const auto filename = std::string(directory) + "/" + std::to_string(extent) + "-" +

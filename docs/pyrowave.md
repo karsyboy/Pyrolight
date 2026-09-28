@@ -56,6 +56,16 @@ decode work to overlap the swapchain wait without buffering another frame.
 libplacebo receives the stream's
 native Rec.709 or PQ/BT.2020 metadata, full/limited range, chroma siting, and
 Sunshine mastering metadata. Decoded pixels are not staged through CPU memory.
+Software Vulkan devices are rejected explicitly: PyroWave requires a hardware
+Vulkan GPU and never falls back to CPU decoding or another codec.
+The integration queries PyroWave's device preference and uses its fragment
+decode path on mobile-class GPUs that perform poorly with the compute iDWT;
+desktop-class GPUs retain the compute path.
+For device-specific benchmarking, `PYROWAVE_FRAGMENT_PATH=1` forces fragment
+decode and `PYROWAVE_FRAGMENT_PATH=0` forces compute decode. Without the
+variable, PyroWave's device recommendation is used.
+The debug overlay reports PyroWave's aggregated GPU dequantization and iDWT
+timestamps separately from CPU decode submission and presentation waiting.
 
 The renderer advertises direct submit because its callback only copies into the
 bounded latest-frame mailbox. This bypasses Moonlight's otherwise redundant

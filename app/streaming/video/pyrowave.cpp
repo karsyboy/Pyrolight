@@ -43,10 +43,38 @@ void PyroWaveVideoDecoder::unlockQueue(void* opaque)
     vk->unlock_queue(vk, self->m_Queue.familyIndex, 0);
 }
 
+void PyroWaveVideoDecoder::collectPerformanceStat(void* opaque, const char* message)
+{
+    auto self = static_cast<PyroWaveVideoDecoder*>(opaque);
+    double milliseconds;
+    if (std::sscanf(message, "Dequant: %lf ms per frame", &milliseconds) == 1) {
+        self->m_GpuDequantMs = milliseconds;
+    }
+    else if (std::sscanf(message, "iDWT: %lf ms per frame", &milliseconds) == 1 ||
+             std::sscanf(message, "iDWT fragment: %lf ms per frame", &milliseconds) == 1) {
+        self->m_GpuIdwtMs = milliseconds;
+    }
+    SDL_LogDebug(SDL_LOG_CATEGORY_APPLICATION, "PyroWave GPU: %s", message);
+}
+
 bool PyroWaveVideoDecoder::borrowDevice()
 {
     auto vk = m_Renderer->getVulkan();
     auto inst = m_Renderer->getVulkanInstance();
+    auto getPhysicalDeviceProperties = reinterpret_cast<PFN_vkGetPhysicalDeviceProperties>(
+        vk->get_proc_addr(vk->instance, "vkGetPhysicalDeviceProperties"));
+    if (!getPhysicalDeviceProperties) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "PyroWave could not query the Vulkan physical device");
+        return false;
+    }
+    VkPhysicalDeviceProperties properties {};
+    getPhysicalDeviceProperties(vk->phys_device, &properties);
+    if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "PyroWave refuses software Vulkan device '%s'; a hardware Vulkan GPU is required",
+                     properties.deviceName);
+        return false;
+    }
     m_AppInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     m_AppInfo.apiVersion = inst->api_version;
     m_InstanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -79,7 +107,11 @@ bool PyroWaveVideoDecoder::borrowDevice()
     info.queue_unlock_callback = unlockQueue;
     info.userdata = this;
     if (pyrowave_create_device(&info, &m_Device) != PYROWAVE_SUCCESS) return false;
-    return pyrowave_device_set_queue_type(m_Device, VK_QUEUE_GRAPHICS_BIT) == PYROWAVE_SUCCESS;
+    if (pyrowave_device_set_queue_type(m_Device, VK_QUEUE_GRAPHICS_BIT) != PYROWAVE_SUCCESS) return false;
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                "PyroWave hardware Vulkan decode device: %s (vendor 0x%04x, device 0x%04x)",
+                properties.deviceName, properties.vendorID, properties.deviceID);
+    return true;
 }
 
 bool PyroWaveVideoDecoder::createPlanes()
@@ -99,7 +131,9 @@ bool PyroWaveVideoDecoder::createPlanes()
         params.w = m_Width >> shift;
         params.h = m_Height >> shift;
         params.format = pl_find_named_fmt(vk->gpu, "r16");
-        params.sampleable = params.storable = true;
+        params.sampleable = true;
+        params.storable = !m_FragmentPath;
+        params.renderable = m_FragmentPath;
         if (!params.format || !(m_Planes[p] = pl_tex_create(vk->gpu, &params))) return false;
         auto& view = m_Buffers.planes[p];
         view.image = pl_vulkan_unwrap(vk->gpu, m_Planes[p], &view.image_format, nullptr);
@@ -134,6 +168,11 @@ bool PyroWaveVideoDecoder::initialize(PDECODER_PARAMETERS params)
     info.width = m_Width;
     info.height = m_Height;
     info.chroma = m_Format & VIDEO_FORMAT_PYROWAVE_444 ? PYROWAVE_CHROMA_SUBSAMPLING_444 : PYROWAVE_CHROMA_SUBSAMPLING_420;
+    bool fragmentOverrideSet = false;
+    const int fragmentOverride = qEnvironmentVariableIntValue("PYROWAVE_FRAGMENT_PATH", &fragmentOverrideSet);
+    m_FragmentPath = fragmentOverrideSet ? fragmentOverride != 0 :
+        pyrowave_decoder_device_prefers_fragment_path(m_Device);
+    info.fragment_path = m_FragmentPath;
     if (pyrowave_decoder_create(&info, &m_Decoder) != PYROWAVE_SUCCESS || !createPlanes()) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "PyroWave decoder/plane creation failed");
         return false;
@@ -152,10 +191,11 @@ bool PyroWaveVideoDecoder::initialize(PDECODER_PARAMETERS params)
         }
     }
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
-                "Native PyroWave Vulkan decoder: %dx%d@%d, %s, %s; display %d Hz, V-sync %s, frame pacing %s",
+                "Native PyroWave Vulkan decoder: %dx%d@%d, %s, %s, %s path; display %d Hz, V-sync %s, frame pacing %s",
                 m_Width, m_Height, params->frameRate,
                 m_Format & VIDEO_FORMAT_PYROWAVE_444 ? "4:4:4" : "4:2:0",
                 m_Format & VIDEO_FORMAT_PYROWAVE_HDR ? "HDR" : "SDR",
+                m_FragmentPath ? "fragment" : "compute",
                 StreamUtils::getDisplayRefreshRate(m_Window),
                 params->enableVsync ? "on" : "off",
                 params->enableFramePacing ? "on" : "off");
@@ -238,6 +278,16 @@ void PyroWaveVideoDecoder::updatePerformanceOverlay(const VIDEO_STATS& stats)
             return;
         }
         used += written;
+    }
+
+    if (m_GpuDequantMs > 0.0 || m_GpuIdwtMs > 0.0) {
+        const int gpuWritten = std::snprintf(text + used, sizeof(text) - size_t(used),
+            "PyroWave GPU dequant/iDWT: %.2f/%.2f ms\n",
+            m_GpuDequantMs, m_GpuIdwtMs);
+        if (gpuWritten < 0 || gpuWritten >= int(sizeof(text)) - used) {
+            return;
+        }
+        used += gpuWritten;
     }
 
     if (stats.renderedFrames != 0) {
@@ -447,10 +497,8 @@ bool PyroWaveVideoDecoder::decodeFrame(const std::vector<uint32_t>& bytes, size_
     if (renderTimeUs) *renderTimeUs = renderEnd - renderStart;
     SDL_LogDebug(SDL_LOG_CATEGORY_APPLICATION, "PyroWave decode+render submission: %llu us (%zu bytes)",
                  static_cast<unsigned long long>(renderEnd - decodeStart), size);
-    if (SDL_LogGetPriority(SDL_LOG_CATEGORY_APPLICATION) <= SDL_LOG_PRIORITY_DEBUG && decodeStart - m_LastStatsTime >= 1000000) {
-        pyrowave_device_report_performance_stats(m_Device, [](void*, const char* message) {
-            SDL_LogDebug(SDL_LOG_CATEGORY_APPLICATION, "PyroWave GPU: %s", message);
-        }, nullptr, true);
+    if (decodeStart - m_LastStatsTime >= 1000000) {
+        pyrowave_device_report_performance_stats(m_Device, collectPerformanceStat, this, true);
         m_LastStatsTime = decodeStart;
     }
     return true;

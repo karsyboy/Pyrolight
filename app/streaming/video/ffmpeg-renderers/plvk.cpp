@@ -275,9 +275,16 @@ bool PlVkRenderer::chooseVulkanDevice(PDECODER_PARAMETERS params, bool hdrOutput
         devicesTried.emplace(i);
     }
 
-    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-                 "No suitable %sVulkan devices found!",
-                 hdrOutputRequired ? "HDR-capable " : "");
+    if (hdrOutputRequired) {
+        // initialize() retries without the HDR surface requirement. HDR input
+        // remains valid and libplacebo tone-maps it to the SDR swapchain.
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "No Vulkan device can present HDR10 on this surface; retrying with an SDR swapchain");
+    }
+    else {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "No suitable Vulkan devices found!");
+    }
     return false;
 }
 
