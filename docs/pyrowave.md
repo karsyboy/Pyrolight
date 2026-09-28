@@ -55,7 +55,7 @@ and submits its GPU decode before waiting for presentation capacity, allowing
 decode work to overlap the swapchain wait without buffering another frame.
 libplacebo receives the stream's
 native Rec.709 or PQ/BT.2020 metadata, full/limited range, chroma siting, and
-Sunshine mastering metadata. Decoded pixels are not staged through CPU memory.
+host mastering metadata. Decoded pixels are not staged through CPU memory.
 Software Vulkan devices are rejected explicitly: PyroWave requires a hardware
 Vulkan GPU and never falls back to CPU decoding or another codec.
 The integration queries PyroWave's device preference and uses its fragment
@@ -81,6 +81,12 @@ The codec accepts up to 2,000,000 Kbps and 240 FPS when the computed encoded
 frame budget remains between 1 KiB and 3 MiB. Actual HDR output still depends
 on an HDR-capable display, compositor, GPU, and driver.
 
+V-Sync is not changed or forced by the PyroWave decoder. With V-Sync enabled,
+Moonlight keeps its synchronized presentation behavior. With V-Sync disabled,
+the Vulkan renderer selects the lowest-latency supported present mode. If a
+high-refresh stream is unexpectedly presentation-limited, testing with V-Sync
+disabled is a useful diagnostic, but it is not universally required.
+
 Example CLI selection:
 
 ```sh
@@ -105,7 +111,8 @@ The test exercises decoder creation, consecutive and malformed frames, mailbox
 replacement, drops, two frame sizes, SDR/PQ, and 4:2:0/4:4:4. It requires a
 Vulkan-capable SDL display even though the window is hidden. Providing
 `SUNSHINE_TEST_PYROWAVE_OUTPUT` additionally renders compatible frame dumps
-from the PyroWave-enabled Sunshine implementation.
+from a compatible Pyroshine implementation. The environment variable retains
+its historical name for compatibility.
 
 The smoke test verifies GPU encoding, decoding, and rendering; it cannot verify
 physical HDR luminance or end-to-end network behavior.

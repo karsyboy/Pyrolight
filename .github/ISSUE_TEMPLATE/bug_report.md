@@ -26,14 +26,14 @@ the problem also occurs with H.264, HEVC, or AV1 selected instead of PyroWave.
 
 ## Host
 
-- Sunshine PyroWave fork release/commit:
+- Pyroshine release/commit:
 - Operating system:
 - GPU and driver:
 - PyroWave encoder settings:
 
 ## Logs and screenshots
 
-Attach the client log and relevant Sunshine log. On Windows, client logs are in
+Attach the client log and relevant Pyroshine log. On Windows, client logs are in
 `%TEMP%`; on Linux, launch the AppImage from a terminal and capture its output.
 Remove credentials, host addresses, and other sensitive information first.
 

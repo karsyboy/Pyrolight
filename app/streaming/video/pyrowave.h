@@ -75,7 +75,6 @@ private:
     double m_GpuIdwtMs = 0.0;
     VIDEO_STATS m_ActiveVideoStats = {};
     VIDEO_STATS m_LastVideoStats = {};
-    VIDEO_STATS m_GlobalVideoStats = {};
     VIDEO_STATS m_PendingOverlayStats = {};
     bool m_OverlayRefreshPending = false;
     int m_LastFrameNumber = 0;

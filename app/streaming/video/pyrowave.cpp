@@ -93,6 +93,10 @@ bool PyroWaveVideoDecoder::borrowDevice()
     m_DeviceInfo.ppEnabledExtensionNames = vk->extensions;
     m_Queue.familyIndex = vk->queue_graphics.index;
     auto getQueue = reinterpret_cast<PFN_vkGetDeviceQueue>(vk->get_proc_addr(vk->instance, "vkGetDeviceQueue"));
+    if (!getQueue) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "PyroWave could not obtain vkGetDeviceQueue");
+        return false;
+    }
     getQueue(vk->device, m_Queue.familyIndex, 0, &m_Queue.queue);
     pyrowave_device_create_info info {};
     info.GetInstanceProcAddr = vk->get_proc_addr;
@@ -106,8 +110,18 @@ bool PyroWaveVideoDecoder::borrowDevice()
     info.queue_lock_callback = lockQueue;
     info.queue_unlock_callback = unlockQueue;
     info.userdata = this;
-    if (pyrowave_create_device(&info, &m_Device) != PYROWAVE_SUCCESS) return false;
-    if (pyrowave_device_set_queue_type(m_Device, VK_QUEUE_GRAPHICS_BIT) != PYROWAVE_SUCCESS) return false;
+    const auto createResult = pyrowave_create_device(&info, &m_Device);
+    if (createResult != PYROWAVE_SUCCESS) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "PyroWave failed to borrow the Vulkan device (result %d)", int(createResult));
+        return false;
+    }
+    const auto queueResult = pyrowave_device_set_queue_type(m_Device, VK_QUEUE_GRAPHICS_BIT);
+    if (queueResult != PYROWAVE_SUCCESS) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "PyroWave failed to select the graphics queue (result %d)", int(queueResult));
+        return false;
+    }
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                 "PyroWave hardware Vulkan decode device: %s (vendor 0x%04x, device 0x%04x)",
                 properties.deviceName, properties.vendorID, properties.deviceID);
@@ -152,8 +166,14 @@ bool PyroWaveVideoDecoder::initialize(PDECODER_PARAMETERS params)
 {
     uint32_t major, minor, patch;
     pyrowave_get_api_version(&major, &minor, &patch);
-    if (major != 0 || minor != 7 || params->width <= 0 || params->height <= 0 ||
-        params->width > 8192 || params->height > 8192 || params->vds == StreamingPreferences::VDS_FORCE_SOFTWARE) return false;
+    if (major != 0 || minor != 7 || patch != 0) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "PyroWave C API %u.%u.%u is incompatible; exactly 0.7.0 is required",
+                     major, minor, patch);
+        return false;
+    }
+    if (params->width <= 0 || params->height <= 0 || params->width > 8192 || params->height > 8192 ||
+        params->vds == StreamingPreferences::VDS_FORCE_SOFTWARE) return false;
     m_Width = params->width;
     m_Height = params->height;
     m_Format = params->videoFormat;
@@ -351,7 +371,6 @@ int PyroWaveVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
             m_PendingOverlayStats = {};
             addVideoStats(m_LastVideoStats, m_PendingOverlayStats, now);
             addVideoStats(m_ActiveVideoStats, m_PendingOverlayStats, now);
-            addVideoStats(m_ActiveVideoStats, m_GlobalVideoStats, now);
             m_LastVideoStats = m_ActiveVideoStats;
             m_ActiveVideoStats = {};
             m_ActiveVideoStats.measurementStartUs = now;
@@ -495,8 +514,6 @@ bool PyroWaveVideoDecoder::decodeFrame(const std::vector<uint32_t>& bytes, size_
     const auto renderEnd = LiGetMicroseconds();
     if (decodeTimeUs) *decodeTimeUs = decodeEnd - decodeStart;
     if (renderTimeUs) *renderTimeUs = renderEnd - renderStart;
-    SDL_LogDebug(SDL_LOG_CATEGORY_APPLICATION, "PyroWave decode+render submission: %llu us (%zu bytes)",
-                 static_cast<unsigned long long>(renderEnd - decodeStart), size);
     if (decodeStart - m_LastStatsTime >= 1000000) {
         pyrowave_device_report_performance_stats(m_Device, collectPerformanceStat, this, true);
         m_LastStatsTime = decodeStart;
@@ -534,8 +551,6 @@ void PyroWaveVideoDecoder::renderPendingFrame(bool rendererReady)
         m_EventQueued = false;
     }
     if (frame.empty()) return;
-    SDL_LogDebug(SDL_LOG_CATEGORY_APPLICATION, "PyroWave packet completion to decode: %llu us",
-                 static_cast<unsigned long long>(LiGetMicroseconds() - enqueueTime));
     const uint64_t processingStart = LiGetMicroseconds();
     uint64_t decodeTimeUs = 0;
     uint64_t renderTimeUs = 0;

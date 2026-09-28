@@ -8,9 +8,9 @@
 	<summary>Moonlight Qt game-streaming client with PyroWave support</summary>
 
 	<description>
-		<p>Moonlight Qt PyroWave is an independent Moonlight Qt fork for streaming games and applications from a compatible Sunshine host.</p>
+		<p>Moonlight Qt PyroWave is an independent Moonlight Qt fork for streaming games and applications from Pyroshine or another compatible host.</p>
 		<p>In addition to Moonlight's H.264, HEVC, and AV1 paths, this build includes an explicitly selectable PyroWave Vulkan codec with SDR, HDR, YUV 4:2:0, and YUV 4:4:4 support.</p>
-		<p>PyroWave requires a compatible PyroWave-enabled Sunshine fork and a supported Vulkan GPU and driver.</p>
+		<p>PyroWave requires a compatible Pyroshine host and a supported Vulkan GPU and driver.</p>
 	</description>
 
 	<url type="homepage">https://github.com/karsyboy/moonlight-qt-pyrowave</url>

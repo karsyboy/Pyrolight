@@ -2,14 +2,15 @@
 
 **Moonlight Qt PyroWave is a Moonlight Qt fork with PyroWave support.** It keeps
 Moonlight's low-latency game-streaming client and adds an explicitly selectable
-PyroWave video path for compatible Sunshine hosts.
+PyroWave video path for compatible
+[Pyroshine](https://github.com/karsyboy/pyroshine) hosts.
 
 This is an independent community fork. It is not an official Moonlight or
 PyroWave project.
 
 ## Why this fork exists
 
-[PyroWave](https://github.com/Themaister/pyrowave) is an intra-only video codec
+[PyroWave](https://github.com/karsyboy/pyrowave) is an intra-only video codec
 designed for very low GPU encode/decode latency on high-bandwidth networks.
 Upstream Moonlight Qt does not include this codec, so this repository maintains
 the client integration and release packaging needed to use it.
@@ -27,7 +28,7 @@ runtime probe succeeds. The implementation:
   libplacebo renderer, without decoded-pixel CPU staging;
 - supports YUV 4:2:0 and 4:4:4; and
 - supports SDR and PQ/BT.2020 HDR using Moonlight's existing HDR controls and
-  Sunshine mastering metadata.
+  host-provided mastering metadata.
 
 See [docs/pyrowave.md](docs/pyrowave.md) for the integration details, pinned
 dependency revision, limits, and developer test procedure.
@@ -68,15 +69,14 @@ chmod +x moonlight-qt-pyrowave-v*-linux-x86_64.AppImage
 
 ## Compatibility and requirements
 
-For normal Moonlight codecs, use a compatible Sunshine or legacy NVIDIA
-GameStream host as supported by the upstream Moonlight client.
+For normal Moonlight codecs, use Pyroshine, a compatible Sunshine host, or a
+legacy NVIDIA GameStream host as supported by upstream Moonlight Qt.
 
 PyroWave additionally requires:
 
 - a release from this repository with the PyroWave runtime bundled;
 - a Vulkan 1.3-capable GPU and driver that pass the startup decoder probe;
-- a compatible PyroWave-enabled
-  [Sunshine fork](https://github.com/karsyboy/Sunshine); and
+- a compatible [Pyroshine](https://github.com/karsyboy/pyroshine) release; and
 - a network that can sustain the selected bitrate.
 
 On the host, enable the PyroWave encoder. In this client, select **PyroWave**
@@ -85,6 +85,11 @@ support them. The client accepts up to 2,000,000 Kbps and 240 FPS, subject to an
 encoded-frame budget of 1 KiB to 3 MiB. Unsupported server capability, device,
 build, or frame-budget combinations fail with an error rather than silently
 falling back.
+
+V-Sync remains a user-selectable Moonlight setting. If a high-refresh PyroWave
+stream is unexpectedly presentation-limited, test with V-Sync disabled so the
+client can use the lowest-latency present mode supported by the Vulkan driver.
+This is a troubleshooting step, not a universal PyroWave requirement.
 
 ## Building from source
 
@@ -145,10 +150,10 @@ and periodically carries upstream client code. General Moonlight usage and
 troubleshooting documentation remains available from the
 [Moonlight project](https://moonlight-stream.org/).
 
-The codec is derived from
-[Themaister's PyroWave](https://github.com/Themaister/pyrowave). This repository
-integrates a pinned patched revision; it does not claim to be the upstream
-PyroWave project.
+The codec dependency is the pinned
+[`karsyboy/pyrowave`](https://github.com/karsyboy/pyrowave) fork, which is
+derived from [Themaister's PyroWave](https://github.com/Themaister/pyrowave).
+This repository does not claim to be either upstream project.
 
 ## Licensing and attribution
 
