@@ -17,6 +17,7 @@ public:
         params.width = params.height = extent; params.frameRate = 60;
         params.testOnly = true;
         REQUIRE(decoder.initialize(&params));
+        REQUIRE(decoder.getDecoderCapabilities() & CAPABILITY_DIRECT_SUBMIT);
         if (const auto directory = std::getenv("SUNSHINE_TEST_PYROWAVE_OUTPUT")) {
             for (int index = 0; index < 16; ++index) {
                 const auto filename = std::string(directory) + "/" + std::to_string(extent) + "-" +
@@ -71,6 +72,10 @@ public:
             LENTRY entry {}; entry.data = reinterpret_cast<char*>(frame.data()); entry.length = packet.size;
             DECODE_UNIT unit {}; unit.fullLength = packet.size; unit.bufferList = &entry;
             REQUIRE(decoder.submitDecodeUnit(&unit) == DR_OK);
+            if (i == 1) {
+                REQUIRE(decoder.submitDecodeUnit(&unit) == DR_OK);
+                REQUIRE(decoder.m_ActiveVideoStats.pacerDroppedFrames == 1);
+            }
             decoder.renderFrameOnMainThread();
             SDL_Event event; while (SDL_PollEvent(&event)) {}
         }

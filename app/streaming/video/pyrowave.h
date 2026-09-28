@@ -3,11 +3,14 @@
 #include "ffmpeg-renderers/plvk.h"
 #include <pyrowave/pyrowave.h>
 #include <memory>
+#include <condition_variable>
 #include <mutex>
+#include <thread>
 #include <vector>
 
-// All GPU operations run on the main render thread. submitDecodeUnit copies a
-// bounded complete encoded frame into a single-slot mailbox; newer frames replace it.
+// GPU operations run on a dedicated render thread. submitDecodeUnit is a
+// non-blocking producer for a single-slot encoded-frame mailbox; newer frames
+// replace it so presentation latency cannot accumulate.
 class PyroWaveVideoDecoder final : public IVideoDecoder {
 public:
     ~PyroWaveVideoDecoder() override;
@@ -15,7 +18,7 @@ public:
     bool isHardwareAccelerated() override { return true; }
     bool isAlwaysFullScreen() override { return false; }
     bool isHdrSupported() override { return true; }
-    int getDecoderCapabilities() override { return 0; }
+    int getDecoderCapabilities() override { return CAPABILITY_DIRECT_SUBMIT; }
     int getDecoderColorspace() override { return COLORSPACE_REC_709; }
     int getDecoderColorRange() override { return COLOR_RANGE_FULL; }
     QSize getDecoderMaxResolution() override { return QSize(8192, 8192); }
@@ -30,7 +33,11 @@ private:
     bool borrowDevice();
     bool createPlanes();
     bool decodeFrame(const std::vector<uint32_t>& bytes, size_t size,
-                     uint64_t* decodeTimeUs = nullptr, uint64_t* renderTimeUs = nullptr);
+                     uint64_t* decodeTimeUs = nullptr, uint64_t* renderTimeUs = nullptr,
+                     bool rendererReady = false);
+    void renderPendingFrame();
+    void renderLoop();
+    void recycleFrame(std::vector<uint32_t>& frame);
     void releasePlanes(uint64_t value);
     static void addVideoStats(const VIDEO_STATS& src, VIDEO_STATS& dst, uint64_t now);
     void updatePerformanceOverlay(const VIDEO_STATS& stats);
@@ -50,14 +57,21 @@ private:
     int m_Width = 0, m_Height = 0, m_Format = 0;
     SDL_Window* m_Window = nullptr;
     std::mutex m_Mutex;
+    std::condition_variable m_FrameReady;
+    std::thread m_RenderThread;
     std::vector<uint32_t> m_Pending;
+    std::vector<uint32_t> m_Spare;
     size_t m_PendingSize = 0;
     bool m_EventQueued = false;
+    bool m_Threaded = false;
+    bool m_Stopping = false;
     bool m_OverlayAttached = false;
     uint64_t m_EnqueueTime = 0;
     uint64_t m_LastStatsTime = 0;
     VIDEO_STATS m_ActiveVideoStats = {};
     VIDEO_STATS m_LastVideoStats = {};
     VIDEO_STATS m_GlobalVideoStats = {};
+    VIDEO_STATS m_PendingOverlayStats = {};
+    bool m_OverlayRefreshPending = false;
     int m_LastFrameNumber = 0;
 };

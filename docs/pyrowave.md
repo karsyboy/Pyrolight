@@ -49,13 +49,20 @@ PyroWave dependency and the bundled shared library are present.
 
 The decoder borrows libplacebo's Vulkan instance, device, graphics queue, and
 queue-lock callbacks. Three GPU-local R16 UNORM planes are exchanged through
-explicit timeline-semaphore ownership. libplacebo receives the stream's native
-Rec.709 or PQ/BT.2020 metadata, full/limited range, chroma siting, and Sunshine
-mastering metadata. Decoded pixels are not staged through CPU memory.
+explicit timeline-semaphore ownership. Decode and rendering submissions run on
+a dedicated high-priority render thread, which waits for presentation capacity
+before latching the newest encoded frame. libplacebo receives the stream's
+native Rec.709 or PQ/BT.2020 metadata, full/limited range, chroma siting, and
+Sunshine mastering metadata. Decoded pixels are not staged through CPU memory.
 
-The frame mailbox is bounded to the latest complete frame. Encoded inputs are
-capped at 3 MiB. Whole-frame FEC remains in use; incomplete frames are dropped,
-and the next intra frame resumes decoding without an IDR request.
+The renderer advertises direct submit because its callback only copies into the
+bounded latest-frame mailbox. This bypasses Moonlight's otherwise redundant
+15-frame decode-unit queue and avoids bursty handoff from a second decoder
+thread. Encoded inputs are capped at 3 MiB and reusable host buffers avoid
+steady-state per-frame allocation. Whole-frame FEC remains in use; incomplete
+frames are dropped, and the next intra frame resumes decoding without an IDR
+request. The client-frame-queue statistic is counted here, before decode, when
+a newly reassembled complete encoded frame replaces the pending mailbox frame.
 
 The existing **HDR** and **YUV 4:4:4** preferences select those PyroWave modes.
 The codec accepts up to 2,000,000 Kbps and 240 FPS when the computed encoded

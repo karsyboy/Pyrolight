@@ -8,6 +8,12 @@
 PyroWaveVideoDecoder::~PyroWaveVideoDecoder()
 {
     if (m_OverlayAttached) Session::get()->getOverlayManager().setOverlayRenderer(nullptr);
+    {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_Stopping = true;
+    }
+    m_FrameReady.notify_one();
+    if (m_RenderThread.joinable()) m_RenderThread.join();
     if (m_Decoder) pyrowave_decoder_destroy(m_Decoder);
     if (m_Device) pyrowave_device_destroy(m_Device);
     if (m_Renderer && m_Renderer->getVulkan()) {
@@ -134,6 +140,15 @@ bool PyroWaveVideoDecoder::initialize(PDECODER_PARAMETERS params)
     if (!params->testOnly) {
         Session::get()->getOverlayManager().setOverlayRenderer(m_Renderer.get());
         m_OverlayAttached = true;
+        try {
+            m_Threaded = true;
+            m_RenderThread = std::thread(&PyroWaveVideoDecoder::renderLoop, this);
+        }
+        catch (const std::system_error& error) {
+            m_Threaded = false;
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to start PyroWave render thread: %s", error.what());
+            return false;
+        }
     }
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "Native PyroWave Vulkan decoder: %dx%d, %s, %s", m_Width, m_Height,
                 m_Format & VIDEO_FORMAT_PYROWAVE_444 ? "4:4:4" : "4:2:0", m_Format & VIDEO_FORMAT_PYROWAVE_HDR ? "HDR" : "SDR");
@@ -246,7 +261,12 @@ void PyroWaveVideoDecoder::updatePerformanceOverlay(const VIDEO_STATS& stats)
 int PyroWaveVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
 {
     if (du->fullLength < 8 || du->fullLength > int(PYROWAVE_MAX_FRAME_BYTES)) return DR_OK;
-    std::vector<uint32_t> frame((du->fullLength + 3) / 4);
+    std::vector<uint32_t> frame;
+    {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        frame.swap(m_Spare);
+    }
+    frame.resize((du->fullLength + 3) / 4);
     size_t offset = 0;
     for (auto entry = du->bufferList; entry; entry = entry->next) {
         if (entry->length <= 0 || size_t(entry->length) > size_t(du->fullLength) - offset) return DR_OK;
@@ -255,8 +275,6 @@ int PyroWaveVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
     }
     if (offset != size_t(du->fullLength)) return DR_OK;
     const uint64_t now = LiGetMicroseconds();
-    VIDEO_STATS overlayStats {};
-    bool refreshOverlay = false;
     {
         std::lock_guard<std::mutex> lock(m_Mutex);
         if (m_ActiveVideoStats.measurementStartUs == 0) {
@@ -273,13 +291,14 @@ int PyroWaveVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
         }
 
         if (now > m_ActiveVideoStats.measurementStartUs + 1000000) {
-            addVideoStats(m_LastVideoStats, overlayStats, now);
-            addVideoStats(m_ActiveVideoStats, overlayStats, now);
+            m_PendingOverlayStats = {};
+            addVideoStats(m_LastVideoStats, m_PendingOverlayStats, now);
+            addVideoStats(m_ActiveVideoStats, m_PendingOverlayStats, now);
             addVideoStats(m_ActiveVideoStats, m_GlobalVideoStats, now);
             m_LastVideoStats = m_ActiveVideoStats;
             m_ActiveVideoStats = {};
             m_ActiveVideoStats.measurementStartUs = now;
-            refreshOverlay = true;
+            m_OverlayRefreshPending = true;
         }
 
         if (du->frameHostProcessingLatency != 0) {
@@ -303,10 +322,16 @@ int PyroWaveVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
             m_ActiveVideoStats.pacerDroppedFrames++;
         }
 
-        m_Pending = std::move(frame);
+        if (!m_Pending.empty()) {
+            m_Pending.swap(frame);
+            if (frame.capacity() > m_Spare.capacity()) m_Spare.swap(frame);
+        }
+        else {
+            m_Pending = std::move(frame);
+        }
         m_PendingSize = offset;
         m_EnqueueTime = now;
-        if (!m_EventQueued) {
+        if (!m_Threaded && !m_EventQueued) {
             SDL_Event event {};
             event.type = SDL_USEREVENT;
             event.user.code = SDL_CODE_FRAME_READY;
@@ -314,9 +339,7 @@ int PyroWaveVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
             m_EventQueued = SDL_PushEvent(&event) == 1;
         }
     }
-    if (refreshOverlay) {
-        updatePerformanceOverlay(overlayStats);
-    }
+    if (m_Threaded) m_FrameReady.notify_one();
     return DR_OK;
 }
 
@@ -334,7 +357,8 @@ void PyroWaveVideoDecoder::releasePlanes(uint64_t value)
 }
 
 bool PyroWaveVideoDecoder::decodeFrame(const std::vector<uint32_t>& bytes, size_t size,
-                                       uint64_t* decodeTimeUs, uint64_t* renderTimeUs)
+                                       uint64_t* decodeTimeUs, uint64_t* renderTimeUs,
+                                       bool rendererReady)
 {
     if (size < 8 || size > PYROWAVE_MAX_FRAME_BYTES || size > bytes.size() * sizeof(uint32_t)) return false;
     // Sequence header metadata is used directly; no assumptions about bit depth.
@@ -409,7 +433,7 @@ bool PyroWaveVideoDecoder::decodeFrame(const std::vector<uint32_t>& bytes, size_
     }
     pl_frame_set_chroma_location(&frame, b >> 31 ? PL_CHROMA_LEFT : PL_CHROMA_CENTER);
     const auto renderStart = LiGetMicroseconds();
-    m_Renderer->waitToRender();
+    if (!rendererReady) m_Renderer->waitToRender();
     m_Renderer->renderPlaceboFrame(frame);
     const auto renderEnd = LiGetMicroseconds();
     if (decodeTimeUs) *decodeTimeUs = decodeEnd - decodeStart;
@@ -425,9 +449,18 @@ bool PyroWaveVideoDecoder::decodeFrame(const std::vector<uint32_t>& bytes, size_
     return true;
 }
 
-void PyroWaveVideoDecoder::renderFrameOnMainThread()
+void PyroWaveVideoDecoder::recycleFrame(std::vector<uint32_t>& frame)
+{
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    frame.clear();
+    if (frame.capacity() > m_Spare.capacity()) m_Spare.swap(frame);
+}
+
+void PyroWaveVideoDecoder::renderPendingFrame()
 {
     std::vector<uint32_t> frame;
+    VIDEO_STATS overlayStats {};
+    bool refreshOverlay = false;
     size_t size;
     uint64_t enqueueTime;
     {
@@ -443,8 +476,11 @@ void PyroWaveVideoDecoder::renderFrameOnMainThread()
     const uint64_t processingStart = LiGetMicroseconds();
     uint64_t decodeTimeUs = 0;
     uint64_t renderTimeUs = 0;
-    if (!decodeFrame(frame, size, &decodeTimeUs, &renderTimeUs)) {
+    if (!decodeFrame(frame, size, &decodeTimeUs, &renderTimeUs, true)) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Rejected incomplete/invalid PyroWave frame or GPU operation failed");
+        // waitToRender() may have acquired a swapchain frame. Submit it so the
+        // next iteration cannot remain blocked behind an invalid input frame.
+        m_Renderer->cleanupRenderContext();
         if (pl_gpu_is_failed(m_Renderer->getVulkan()->gpu)) {
             SDL_Event event {}; event.type = SDL_RENDER_DEVICE_RESET; SDL_PushEvent(&event);
         }
@@ -456,7 +492,48 @@ void PyroWaveVideoDecoder::renderFrameOnMainThread()
         m_ActiveVideoStats.totalDecodeTimeUs += decodeTimeUs;
         m_ActiveVideoStats.totalPacerTimeUs += processingStart - enqueueTime;
         m_ActiveVideoStats.totalRenderTimeUs += renderTimeUs;
+        if (m_OverlayRefreshPending) {
+            overlayStats = m_PendingOverlayStats;
+            m_OverlayRefreshPending = false;
+            refreshOverlay = true;
+        }
     }
+    recycleFrame(frame);
+    if (refreshOverlay) updatePerformanceOverlay(overlayStats);
+}
+
+void PyroWaveVideoDecoder::renderLoop()
+{
+    if (SDL_SetThreadPriority(SDL_THREAD_PRIORITY_HIGH) < 0) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Unable to set PyroWave render thread priority: %s", SDL_GetError());
+    }
+    while (true) {
+        {
+            std::unique_lock<std::mutex> lock(m_Mutex);
+            m_FrameReady.wait(lock, [this] { return m_Stopping || !m_Pending.empty(); });
+            if (m_Stopping) break;
+        }
+
+        // Wait for presentation capacity before latching the mailbox. Frames
+        // arriving during the wait replace stale work instead of being decoded
+        // and then held until the display is ready.
+        m_Renderer->waitToRender();
+        {
+            std::lock_guard<std::mutex> lock(m_Mutex);
+            if (m_Stopping) break;
+        }
+        renderPendingFrame();
+    }
+    m_Renderer->cleanupRenderContext();
+}
+
+void PyroWaveVideoDecoder::renderFrameOnMainThread()
+{
+    // Production uses the dedicated Vulkan render thread. The synchronous path
+    // remains for renderer probing and the GPU smoke test.
+    if (m_Threaded) return;
+    m_Renderer->waitToRender();
+    renderPendingFrame();
 }
 
 bool PyroWaveVideoDecoder::notifyWindowChanged(PWINDOW_STATE_CHANGE_INFO info)
