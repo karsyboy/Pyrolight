@@ -54,6 +54,10 @@ if [ -n "${PYROWAVE_PREFIX:-}" ]; then
   [ -f "$PYROWAVE_PREFIX/lib/libpyrowave-shared.so.0" ] || fail "Invalid PYROWAVE_PREFIX: libpyrowave-shared.so.0 not found"
   [ -f "$PYROWAVE_PREFIX/share/licenses/pyrowave/LICENSE" ] || fail "Invalid PYROWAVE_PREFIX: PyroWave license not found"
   export PKG_CONFIG_PATH="$PYROWAVE_PREFIX/share/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+  # linuxdeploy resolves the executable's DT_NEEDED entries before processing
+  # explicit --library arguments, so the private PyroWave prefix must also be
+  # visible to its dependency scanner.
+  export LD_LIBRARY_PATH="$PYROWAVE_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
   QMAKE_CONFIG+=(CONFIG+=enable-pyrowave)
   LINUXDEPLOY_EXTRA_ARGS+=(--library="$PYROWAVE_PREFIX/lib/libpyrowave-shared.so.0")
 fi

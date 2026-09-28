@@ -422,7 +422,7 @@ int StreamingPreferences::getDefaultBitrate(int width, int height, int fps, bool
 
 #ifdef HAVE_PYROWAVE
 #include <vulkan/vulkan.h>
-#include <pyrowave.h>
+#include <pyrowave/pyrowave.h>
 #endif
 
 bool StreamingPreferences::isPyroWaveAvailable()
