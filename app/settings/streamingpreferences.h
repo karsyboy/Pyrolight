@@ -12,7 +12,8 @@ public:
     static StreamingPreferences* get(QQmlEngine *qmlEngine = nullptr);
 
     Q_INVOKABLE static int
-    getDefaultBitrate(int width, int height, int fps, bool yuv444);
+    getDefaultBitrate(int width, int height, int fps, bool yuv444,
+                      int videoCodecConfig, bool hdr);
 
     Q_INVOKABLE void save();
     Q_INVOKABLE static bool isPyroWaveAvailable();
@@ -248,4 +249,3 @@ private:
 
     QQmlEngine* m_QmlEngine;
 };
-

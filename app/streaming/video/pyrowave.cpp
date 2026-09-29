@@ -142,8 +142,11 @@ bool PyroWaveVideoDecoder::createPlanes()
     for (int p = 0; p < 3; p++) {
         const int shift = p && !(m_Format & VIDEO_FORMAT_PYROWAVE_444) ? 1 : 0;
         pl_tex_params params {};
-        params.w = m_Width >> shift;
-        params.h = m_Height >> shift;
+        // These are the visible stream dimensions. PyroWave keeps its 32-pixel
+        // wavelet alignment internal; exposing aligned extents here would make
+        // libplacebo rescale padded rows/columns back into the visible picture.
+        params.w = pyroWaveVisiblePlaneDimension(m_Width, shift != 0);
+        params.h = pyroWaveVisiblePlaneDimension(m_Height, shift != 0);
         params.format = pl_find_named_fmt(vk->gpu, "r16");
         params.sampleable = true;
         params.storable = !m_FragmentPath;

@@ -1741,11 +1741,15 @@ bool Session::startConnectionAsync()
         m_StreamConfig.bitrate == StreamingPreferences::getDefaultBitrate(m_StreamConfig.width,
                                                                           m_StreamConfig.height,
                                                                           m_StreamConfig.fps,
-                                                                          true)) {
+                                                                          true,
+                                                                          m_Preferences->videoCodecConfig,
+                                                                          m_Preferences->enableHdr)) {
         m_StreamConfig.bitrate = StreamingPreferences::getDefaultBitrate(m_StreamConfig.width,
                                                                          m_StreamConfig.height,
                                                                          m_StreamConfig.fps,
-                                                                         false);
+                                                                         false,
+                                                                         m_Preferences->videoCodecConfig,
+                                                                         m_Preferences->enableHdr);
     }
 
     int err = LiStartConnection(&hostInfo, &m_StreamConfig, &k_ConnCallbacks,

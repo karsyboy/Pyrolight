@@ -8,6 +8,22 @@
 #include <thread>
 #include <vector>
 
+constexpr int pyroWaveVisiblePlaneDimension(int visibleDimension, bool chroma420Plane)
+{
+    return visibleDimension >> (chroma420Plane ? 1 : 0);
+}
+
+// PyroWave's aligned wavelet extent must never leak into renderer textures.
+static_assert(pyroWaveVisiblePlaneDimension(1920, false) == 1920);
+static_assert(pyroWaveVisiblePlaneDimension(1080, false) == 1080);
+static_assert(pyroWaveVisiblePlaneDimension(2560, false) == 2560);
+static_assert(pyroWaveVisiblePlaneDimension(1440, false) == 1440);
+static_assert(pyroWaveVisiblePlaneDimension(3440, false) == 3440);
+static_assert(pyroWaveVisiblePlaneDimension(3840, false) == 3840);
+static_assert(pyroWaveVisiblePlaneDimension(2160, false) == 2160);
+static_assert(((3440 + 31) & ~31) == 3456 && pyroWaveVisiblePlaneDimension(3440, false) != 3456);
+static_assert(((2160 + 31) & ~31) == 2176 && pyroWaveVisiblePlaneDimension(2160, false) != 2176);
+
 // GPU operations run on a dedicated render thread. submitDecodeUnit is a
 // non-blocking producer for a single-slot encoded-frame mailbox; newer frames
 // replace it so presentation latency cannot accumulate.

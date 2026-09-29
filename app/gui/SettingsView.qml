@@ -285,7 +285,9 @@ Flickable {
                                     StreamingPreferences.bitrateKbps = StreamingPreferences.getDefaultBitrate(StreamingPreferences.width,
                                                                                                               StreamingPreferences.height,
                                                                                                               StreamingPreferences.fps,
-                                                                                                              StreamingPreferences.enableYUV444);
+                                                                                                              StreamingPreferences.enableYUV444,
+                                                                                                              StreamingPreferences.videoCodecConfig,
+                                                                                                              StreamingPreferences.enableHdr);
                                     slider.value = StreamingPreferences.bitrateKbps
                                 }
                             }
@@ -453,7 +455,9 @@ Flickable {
                                     StreamingPreferences.bitrateKbps = StreamingPreferences.getDefaultBitrate(StreamingPreferences.width,
                                                                                                               StreamingPreferences.height,
                                                                                                               StreamingPreferences.fps,
-                                                                                                              StreamingPreferences.enableYUV444);
+                                                                                                              StreamingPreferences.enableYUV444,
+                                                                                                              StreamingPreferences.videoCodecConfig,
+                                                                                                              StreamingPreferences.enableHdr);
                                     slider.value = StreamingPreferences.bitrateKbps
                                 }
                             }
@@ -677,7 +681,9 @@ Flickable {
                 Label {
                     width: parent.width
                     id: bitrateDesc
-                    text: qsTr("Lower the bitrate on slower connections. Raise the bitrate to increase image quality.")
+                    text: StreamingPreferences.videoCodecConfig === StreamingPreferences.VCC_FORCE_PYROWAVE ?
+                              qsTr("PyroWave is intra-only: bitrate is a per-frame quality budget and scales linearly with frame rate. High-refresh 4K needs substantially more bandwidth.") :
+                              qsTr("Lower the bitrate on slower connections. Raise the bitrate to increase image quality.")
                     font.pointSize: 9
                     wrapMode: Text.Wrap
                 }
@@ -715,10 +721,10 @@ Flickable {
 
                     Button {
                         id: resetBitrateButton
-                        text: qsTr("Use Default (%1 Mbps)").arg(StreamingPreferences.getDefaultBitrate(StreamingPreferences.width, StreamingPreferences.height, StreamingPreferences.fps, StreamingPreferences.enableYUV444) / 1000.0)
-                        visible: StreamingPreferences.bitrateKbps !== StreamingPreferences.getDefaultBitrate(StreamingPreferences.width, StreamingPreferences.height, StreamingPreferences.fps, StreamingPreferences.enableYUV444)
+                        text: qsTr("Use Default (%1 Mbps)").arg(StreamingPreferences.getDefaultBitrate(StreamingPreferences.width, StreamingPreferences.height, StreamingPreferences.fps, StreamingPreferences.enableYUV444, StreamingPreferences.videoCodecConfig, StreamingPreferences.enableHdr) / 1000.0)
+                        visible: StreamingPreferences.bitrateKbps !== StreamingPreferences.getDefaultBitrate(StreamingPreferences.width, StreamingPreferences.height, StreamingPreferences.fps, StreamingPreferences.enableYUV444, StreamingPreferences.videoCodecConfig, StreamingPreferences.enableHdr)
                         onClicked: {
-                            var defaultBitrate = StreamingPreferences.getDefaultBitrate(StreamingPreferences.width, StreamingPreferences.height, StreamingPreferences.fps, StreamingPreferences.enableYUV444)
+                            var defaultBitrate = StreamingPreferences.getDefaultBitrate(StreamingPreferences.width, StreamingPreferences.height, StreamingPreferences.fps, StreamingPreferences.enableYUV444, StreamingPreferences.videoCodecConfig, StreamingPreferences.enableHdr)
                             StreamingPreferences.bitrateKbps = defaultBitrate
                             StreamingPreferences.autoAdjustBitrate = true
                             slider.value = defaultBitrate
@@ -858,7 +864,14 @@ Flickable {
                     enabled: SystemProperties.supportsHdr
                     checked: enabled && StreamingPreferences.enableHdr
                     onCheckedChanged: {
-                        StreamingPreferences.enableHdr = checked
+                        if (StreamingPreferences.enableHdr !== checked) {
+                            StreamingPreferences.enableHdr = checked
+                            if (StreamingPreferences.autoAdjustBitrate) {
+                                var defaultBitrate = StreamingPreferences.getDefaultBitrate(StreamingPreferences.width, StreamingPreferences.height, StreamingPreferences.fps, StreamingPreferences.enableYUV444, StreamingPreferences.videoCodecConfig, StreamingPreferences.enableHdr)
+                                StreamingPreferences.bitrateKbps = defaultBitrate
+                                slider.value = defaultBitrate
+                            }
+                        }
                     }
 
                     // Updating StreamingPreferences.videoCodecConfig is handled above
@@ -1655,6 +1668,11 @@ Flickable {
                     onActivated : {
                         if (enabled) {
                             StreamingPreferences.videoCodecConfig = codecListModel.get(currentIndex).val
+                            if (StreamingPreferences.autoAdjustBitrate) {
+                                var defaultBitrate = StreamingPreferences.getDefaultBitrate(StreamingPreferences.width, StreamingPreferences.height, StreamingPreferences.fps, StreamingPreferences.enableYUV444, StreamingPreferences.videoCodecConfig, StreamingPreferences.enableHdr)
+                                StreamingPreferences.bitrateKbps = defaultBitrate
+                                slider.value = defaultBitrate
+                            }
                         }
                     }
                 }
@@ -1730,7 +1748,9 @@ Flickable {
                                 StreamingPreferences.bitrateKbps = StreamingPreferences.getDefaultBitrate(StreamingPreferences.width,
                                                                                                           StreamingPreferences.height,
                                                                                                           StreamingPreferences.fps,
-                                                                                                          StreamingPreferences.enableYUV444);
+                                                                                                          StreamingPreferences.enableYUV444,
+                                                                                                          StreamingPreferences.videoCodecConfig,
+                                                                                                          StreamingPreferences.enableHdr);
                                 slider.value = StreamingPreferences.bitrateKbps
                             }
                         }

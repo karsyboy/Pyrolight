@@ -81,6 +81,20 @@ The codec accepts up to 2,000,000 Kbps and 240 FPS when the computed encoded
 frame budget remains between 1 KiB and 3 MiB. Actual HDR output still depends
 on an HDR-capable display, compositor, GPU, and driver.
 
+PyroWave uses a codec-specific default because it is intra-only. The default
+starts at 400,000 bytes per 3840x2160 4:2:0 SDR frame, scales with pixel count,
+applies the codec evaluation's conservative 20% allowances for 4:4:4 and HDR,
+and then multiplies by FPS. Thus 4K defaults are approximately 192 Mbps at 60 FPS, 384 Mbps at 120
+FPS, and 461 Mbps at 144 FPS before 4:4:4/HDR scaling. These are tuning seeds,
+not guaranteed requirements. Selecting a bitrate manually clears default
+tracking; Moonlight will not silently replace it. `autoAdjustBitrate` only
+tracks setting changes and is not a live network bitrate controller.
+
+The bitstream carries the visible width and height. PyroWave's 32-pixel wavelet
+alignment remains internal to the codec; the decoder's libplacebo textures and
+crop use the true visible dimensions. This prevents padded rows or columns from
+being rescaled into the displayed picture.
+
 V-Sync is not changed or forced by the PyroWave decoder. With V-Sync enabled,
 Moonlight keeps its synchronized presentation behavior. With V-Sync disabled,
 the Vulkan renderer selects the lowest-latency supported present mode. If a

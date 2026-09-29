@@ -1,4 +1,5 @@
 #include "streamingpreferences.h"
+#include "bitratecalculator.h"
 #include "utils.h"
 
 #include <QSettings>
@@ -126,9 +127,19 @@ void StreamingPreferences::reload()
     height = settings.value(SER_HEIGHT, 720).toInt();
     fps = settings.value(SER_FPS, 60).toInt();
     enableYUV444 = settings.value(SER_YUV444, false).toBool();
-    bitrateKbps = settings.value(SER_BITRATE, getDefaultBitrate(width, height, fps, enableYUV444)).toInt();
+    enableHdr = settings.value(SER_HDR, false).toBool();
+    videoCodecConfig = static_cast<VideoCodecConfig>(settings.value(SER_VIDEOCFG,
+                                                  static_cast<int>(VideoCodecConfig::VCC_AUTO)).toInt());
     unlockBitrate = settings.value(SER_UNLOCK_BITRATE, false).toBool();
     autoAdjustBitrate = settings.value(SER_AUTOADJUSTBITRATE, true).toBool();
+    const int calculatedDefault = getDefaultBitrate(width, height, fps, enableYUV444,
+                                                     videoCodecConfig, enableHdr);
+    // autoAdjustBitrate means "track the default as settings change". Recompute
+    // it on load too, so an old predictive-codec default is not retained after
+    // selecting PyroWave. A manually selected bitrate has this flag cleared and
+    // remains authoritative.
+    bitrateKbps = autoAdjustBitrate ? calculatedDefault :
+                  settings.value(SER_BITRATE, calculatedDefault).toInt();
     enableVsync = settings.value(SER_VSYNC, true).toBool();
     gameOptimizations = settings.value(SER_GAMEOPTS, true).toBool();
     playAudioOnHost = settings.value(SER_HOSTAUDIO, false).toBool();
@@ -151,13 +162,10 @@ void StreamingPreferences::reload()
     reverseScrollDirection = settings.value(SER_REVERSESCROLL, false).toBool();
     swapFaceButtons = settings.value(SER_SWAPFACEBUTTONS, false).toBool();
     keepAwake = settings.value(SER_KEEPAWAKE, true).toBool();
-    enableHdr = settings.value(SER_HDR, false).toBool();
     captureSysKeysMode = static_cast<CaptureSysKeysMode>(settings.value(SER_CAPTURESYSKEYS,
                                                          static_cast<int>(CaptureSysKeysMode::CSK_OFF)).toInt());
     audioConfig = static_cast<AudioConfig>(settings.value(SER_AUDIOCFG,
                                                   static_cast<int>(AudioConfig::AC_STEREO)).toInt());
-    videoCodecConfig = static_cast<VideoCodecConfig>(settings.value(SER_VIDEOCFG,
-                                                  static_cast<int>(VideoCodecConfig::VCC_AUTO)).toInt());
     videoDecoderSelection = static_cast<VideoDecoderSelection>(settings.value(SER_VIDEODEC,
                                                   static_cast<int>(VideoDecoderSelection::VDS_AUTO)).toInt());
     rendererSelection = static_cast<RendererSelection>(settings.value(SER_RENDERER,
@@ -364,8 +372,16 @@ void StreamingPreferences::save()
     settings.setValue(SER_KEEPAWAKE, keepAwake);
 }
 
-int StreamingPreferences::getDefaultBitrate(int width, int height, int fps, bool yuv444)
+int StreamingPreferences::getDefaultBitrate(int width, int height, int fps, bool yuv444,
+                                            int videoCodecConfig, bool hdr)
 {
+    if (videoCodecConfig == VCC_FORCE_PYROWAVE) {
+        // PyroWave is intra-only, so quality is governed by bytes per frame.
+        // 400 kB at 4K 4:2:0 SDR is an intentionally quality-oriented
+        // starting point which should be refined with empirical quality data.
+        return BitrateCalculator::pyroWaveDefaultKbps(width, height, fps, yuv444, hdr);
+    }
+
     // Don't scale bitrate linearly beyond 60 FPS. It's definitely not a linear
     // bitrate increase for frame rate once we get to values that high.
     float frameRateFactor = (fps <= 60 ? fps : (qSqrt(fps / 60.f) * 60.f)) / 30.f;
