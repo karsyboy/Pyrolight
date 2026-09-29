@@ -3,6 +3,10 @@
 #include <QObject>
 #include <QRect>
 #include <QQmlEngine>
+#include <QStringList>
+#include <QVariantMap>
+
+class QSettings;
 
 class StreamingPreferences : public QObject
 {
@@ -17,6 +21,26 @@ public:
 
     Q_INVOKABLE void save();
     Q_INVOKABLE static bool isPyroWaveAvailable();
+
+    Q_PROPERTY(QString activeProfileId READ activeProfileId NOTIFY activeProfileChanged)
+    Q_PROPERTY(QString activeProfileName READ activeProfileName NOTIFY activeProfileChanged)
+    Q_PROPERTY(QStringList profileIds READ profileIds NOTIFY profilesChanged)
+    Q_PROPERTY(QStringList profileNames READ profileNames NOTIFY profilesChanged)
+    Q_PROPERTY(QString lastProfileError READ lastProfileError NOTIFY lastProfileErrorChanged)
+    Q_PROPERTY(bool applyingProfile READ applyingProfile NOTIFY applyingProfileChanged)
+
+    QString activeProfileId() const { return m_ActiveProfileId; }
+    QString activeProfileName() const { return m_ActiveProfileName; }
+    QStringList profileIds() const { return m_ProfileIds; }
+    QStringList profileNames() const { return m_ProfileNames; }
+    QString lastProfileError() const { return m_LastProfileError; }
+    bool applyingProfile() const { return m_ApplyingProfile; }
+
+    Q_INVOKABLE bool createProfile(const QString& name);
+    Q_INVOKABLE bool duplicateProfile(const QString& sourceProfileId, const QString& name);
+    Q_INVOKABLE bool renameProfile(const QString& profileId, const QString& name);
+    Q_INVOKABLE bool deleteProfile(const QString& profileId);
+    Q_INVOKABLE bool activateProfile(const QString& profileId);
 
     void reload();
 
@@ -241,11 +265,40 @@ signals:
     void keepAwakeChanged();
     void languageChanged();
     void rendererSelectionChanged();
+    void profilesChanged();
+    void activeProfileChanged();
+    void profileLoaded();
+    void lastProfileErrorChanged();
+    void applyingProfileChanged();
 
 private:
     explicit StreamingPreferences(QQmlEngine *qmlEngine);
 
     QString getSuffixFromLanguage(Language lang);
+    void initializeRecommendedFullScreenMode();
+    void loadLegacySettings(QSettings& settings);
+    void saveGlobalSettings(QSettings& settings) const;
+    QVariantMap profileSettings() const;
+    QVariantMap defaultProfileSettings() const;
+    QVariantMap readProfileSettings(QSettings& settings, const QString& profileId) const;
+    void applyProfileSettings(const QVariantMap& values);
+    void writeProfileSettings(QSettings& settings, const QString& profileId,
+                              const QVariantMap& values) const;
+    void saveActiveProfile(QSettings& settings) const;
+    bool loadProfile(QSettings& settings, const QString& profileId, bool notify);
+    void initializeProfiles(QSettings& settings);
+    void refreshProfiles(QSettings& settings);
+    void emitProfileSettingChanges(const QVariantMap& oldValues,
+                                   const QVariantMap& newValues);
+    bool validateProfileName(const QString& name, const QString& excludingId = QString());
+    bool profileExists(QSettings& settings, const QString& profileId) const;
+    void setProfileError(const QString& error);
 
     QQmlEngine* m_QmlEngine;
+    QString m_ActiveProfileId;
+    QString m_ActiveProfileName;
+    QStringList m_ProfileIds;
+    QStringList m_ProfileNames;
+    QString m_LastProfileError;
+    bool m_ApplyingProfile = false;
 };

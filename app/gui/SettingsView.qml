@@ -14,6 +14,36 @@ Flickable {
 
     signal languageChanged()
 
+    function selectModelValue(comboBox, listModel, value) {
+        for (var i = 0; i < listModel.count; i++) {
+            if (listModel.get(i).val === value) {
+                comboBox.currentIndex = i
+                comboBox.recalculateWidth()
+                return
+            }
+        }
+        comboBox.currentIndex = 0
+    }
+
+    function synchronizeProfileControls() {
+        profileComboBox.reinitialize()
+        resolutionComboBox.syncFromPreferences()
+        fpsComboBox.reinitialize()
+        windowModeComboBox.reinitialize()
+        selectModelValue(audioComboBox, audioListModel, StreamingPreferences.audioConfig)
+        selectModelValue(decoderComboBox, decoderListModel, StreamingPreferences.videoDecoderSelection)
+        selectModelValue(codecComboBox, codecListModel, StreamingPreferences.videoCodecConfig)
+        selectModelValue(rendererComboBox, rendererListModel, StreamingPreferences.rendererSelection)
+        slider.value = StreamingPreferences.bitrateKbps
+    }
+
+    Connections {
+        target: StreamingPreferences
+        onProfileLoaded: settingsPage.synchronizeProfileControls()
+        onProfilesChanged: profileComboBox.reinitialize()
+        onActiveProfileChanged: profileComboBox.reinitialize()
+    }
+
     boundsBehavior: Flickable.OvershootBounds
 
     contentWidth: settingsColumn1.width > settingsColumn2.width ? settingsColumn1.width : settingsColumn2.width
@@ -76,7 +106,7 @@ Flickable {
 
         // Highlight the first item if a gamepad is connected
         if (SdlGamepadKeyNavigation.getConnectedGamepads() > 0) {
-            resolutionComboBox.forceActiveFocus(Qt.TabFocus)
+            profileComboBox.forceActiveFocus(Qt.TabFocus)
         }
     }
 
@@ -98,6 +128,158 @@ Flickable {
         id: settingsColumn1
         width: settingsPage.width / 2
         spacing: 15
+
+        GroupBox {
+            id: profileSettingsGroupBox
+            width: (parent.width - (parent.leftPadding + parent.rightPadding))
+            padding: 12
+            title: "<font color=\"skyblue\">" + qsTr("Streaming Profile") + "</font>"
+            font.pointSize: 12
+
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: 8
+
+                AutoResizingComboBox {
+                    id: profileComboBox
+                    Layout.fillWidth: true
+                    model: StreamingPreferences.profileNames
+
+                    function reinitialize() {
+                        var ids = StreamingPreferences.profileIds
+                        currentIndex = 0
+                        for (var i = 0; i < ids.length; i++) {
+                            if (ids[i] === StreamingPreferences.activeProfileId) {
+                                currentIndex = i
+                                break
+                            }
+                        }
+                        recalculateWidth()
+                    }
+
+                    Component.onCompleted: reinitialize()
+
+                    onActivated: {
+                        var ids = StreamingPreferences.profileIds
+                        if (currentIndex >= 0 && currentIndex < ids.length &&
+                                !StreamingPreferences.activateProfile(ids[currentIndex])) {
+                            profileErrorDialog.text = StreamingPreferences.lastProfileError
+                            profileErrorDialog.open()
+                            reinitialize()
+                        }
+                    }
+                }
+
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: width < 420 ? 2 : 4
+
+                    Button {
+                        text: qsTr("New")
+                        Layout.fillWidth: true
+                        onClicked: profileNameDialog.openForCreate()
+                    }
+                    Button {
+                        text: qsTr("Duplicate")
+                        Layout.fillWidth: true
+                        onClicked: profileNameDialog.openForDuplicate()
+                    }
+                    Button {
+                        text: qsTr("Rename")
+                        Layout.fillWidth: true
+                        enabled: StreamingPreferences.activeProfileId !== "default"
+                        onClicked: profileNameDialog.openForRename()
+                    }
+                    Button {
+                        text: qsTr("Delete")
+                        Layout.fillWidth: true
+                        enabled: StreamingPreferences.activeProfileId !== "default"
+                        onClicked: deleteProfileDialog.open()
+                    }
+                }
+            }
+        }
+
+        NavigableDialog {
+            id: profileNameDialog
+            property int operation: 0
+            property string promptText
+            standardButtons: Dialog.Ok | Dialog.Cancel
+
+            function openForCreate() {
+                operation = 0
+                promptText = qsTr("Enter a name for the new profile:")
+                profileNameField.text = ""
+                open()
+            }
+            function openForDuplicate() {
+                operation = 1
+                promptText = qsTr("Enter a name for the duplicated profile:")
+                profileNameField.text = qsTr("%1 Copy").arg(StreamingPreferences.activeProfileName)
+                open()
+            }
+            function openForRename() {
+                operation = 2
+                promptText = qsTr("Enter a new name for this profile:")
+                profileNameField.text = StreamingPreferences.activeProfileName
+                open()
+            }
+
+            onOpened: {
+                profileNameField.selectAll()
+                profileNameField.forceActiveFocus()
+            }
+
+            onAccepted: {
+                var success
+                if (operation === 0) {
+                    success = StreamingPreferences.createProfile(profileNameField.text)
+                } else if (operation === 1) {
+                    success = StreamingPreferences.duplicateProfile(StreamingPreferences.activeProfileId,
+                                                                    profileNameField.text)
+                } else {
+                    success = StreamingPreferences.renameProfile(StreamingPreferences.activeProfileId,
+                                                                 profileNameField.text)
+                }
+                if (!success) {
+                    profileErrorDialog.text = StreamingPreferences.lastProfileError
+                    profileErrorDialog.open()
+                }
+            }
+
+            ColumnLayout {
+                Label {
+                    text: profileNameDialog.promptText
+                    wrapMode: Text.Wrap
+                    Layout.maximumWidth: 400
+                }
+                TextField {
+                    id: profileNameField
+                    Layout.fillWidth: true
+                    maximumLength: 64
+                    Keys.onReturnPressed: profileNameDialog.accept()
+                    Keys.onEnterPressed: profileNameDialog.accept()
+                }
+            }
+        }
+
+        NavigableMessageDialog {
+            id: deleteProfileDialog
+            standardButtons: Dialog.Yes | Dialog.No
+            text: qsTr("Delete the profile \"%1\"? This cannot be undone.")
+                  .arg(StreamingPreferences.activeProfileName)
+            onAccepted: {
+                if (!StreamingPreferences.deleteProfile(StreamingPreferences.activeProfileId)) {
+                    profileErrorDialog.text = StreamingPreferences.lastProfileError
+                    profileErrorDialog.open()
+                }
+            }
+        }
+
+        NavigableMessageDialog {
+            id: profileErrorDialog
+            standardButtons: Dialog.Ok
+        }
 
         GroupBox {
             id: basicSettingsGroupBox
@@ -160,6 +342,39 @@ Flickable {
                                                                "is_custom": false
                                                            })
                             }
+                        }
+
+                        function syncFromPreferences() {
+                            for (var i = resolutionListModel.count - 1; i >= 0; i--) {
+                                if (resolutionListModel.get(i).is_custom) {
+                                    resolutionListModel.remove(i)
+                                }
+                            }
+
+                            var selectedIndex = -1
+                            for (var j = 0; j < resolutionListModel.count; j++) {
+                                if (StreamingPreferences.width === parseInt(resolutionListModel.get(j).video_width) &&
+                                        StreamingPreferences.height === parseInt(resolutionListModel.get(j).video_height)) {
+                                    selectedIndex = j
+                                    break
+                                }
+                            }
+
+                            if (selectedIndex < 0) {
+                                resolutionListModel.append({
+                                    "text": qsTr("Custom") + " (" + StreamingPreferences.width + "x" + StreamingPreferences.height + ")",
+                                    "video_width": "" + StreamingPreferences.width,
+                                    "video_height": "" + StreamingPreferences.height,
+                                    "is_custom": true
+                                })
+                                selectedIndex = resolutionListModel.count - 1
+                            } else {
+                                resolutionListModel.append({"text": qsTr("Custom"), "video_width": "",
+                                                            "video_height": "", "is_custom": true})
+                            }
+                            currentIndex = selectedIndex
+                            lastIndexValue = selectedIndex
+                            recalculateWidth()
                         }
 
                         // ignore setting the index at first, and actually set it when the component is loaded
@@ -595,6 +810,12 @@ Flickable {
                         }
 
                         function reinitialize() {
+                            for (var customIndex = fpsListModel.count - 1; customIndex >= 0; customIndex--) {
+                                if (fpsListModel.get(customIndex).is_custom) {
+                                    fpsListModel.remove(customIndex)
+                                }
+                            }
+
                             // Add native refresh rate for all attached displays
                             var done = false
                             for (var displayIndex = 0; !done; displayIndex++) {
@@ -706,7 +927,9 @@ Flickable {
 
                         onValueChanged: {
                             bitrateTitle.text = qsTr("Video bitrate: %1 Mbps").arg(value / 1000.0)
-                            StreamingPreferences.bitrateKbps = value
+                            if (!StreamingPreferences.applyingProfile) {
+                                StreamingPreferences.bitrateKbps = value
+                            }
                         }
 
                         onMoved: {
@@ -795,7 +1018,6 @@ Flickable {
                              }
                         }
 
-                        activated(currentIndex)
                     }
 
                     Component.onCompleted: {
@@ -829,7 +1051,9 @@ Flickable {
                         font.pointSize:  12
                         checked: StreamingPreferences.enableVsync
                         onCheckedChanged: {
-                            StreamingPreferences.enableVsync = checked
+                            if (!StreamingPreferences.applyingProfile) {
+                                StreamingPreferences.enableVsync = checked
+                            }
                         }
 
                         ToolTip.delay: 1000
@@ -846,7 +1070,9 @@ Flickable {
                         enabled: StreamingPreferences.enableVsync
                         checked: StreamingPreferences.enableVsync && StreamingPreferences.framePacing
                         onCheckedChanged: {
-                            StreamingPreferences.framePacing = checked
+                            if (!StreamingPreferences.applyingProfile) {
+                                StreamingPreferences.framePacing = checked
+                            }
                         }
                         ToolTip.delay: 1000
                         ToolTip.timeout: 5000
@@ -864,7 +1090,7 @@ Flickable {
                     enabled: SystemProperties.supportsHdr
                     checked: enabled && StreamingPreferences.enableHdr
                     onCheckedChanged: {
-                        if (StreamingPreferences.enableHdr !== checked) {
+                        if (!StreamingPreferences.applyingProfile && StreamingPreferences.enableHdr !== checked) {
                             StreamingPreferences.enableHdr = checked
                             if (StreamingPreferences.autoAdjustBitrate) {
                                 var defaultBitrate = StreamingPreferences.getDefaultBitrate(StreamingPreferences.width, StreamingPreferences.height, StreamingPreferences.fps, StreamingPreferences.enableYUV444, StreamingPreferences.videoCodecConfig, StreamingPreferences.enableHdr)
@@ -910,16 +1136,8 @@ Flickable {
                 AutoResizingComboBox {
                     // ignore setting the index at first, and actually set it when the component is loaded
                     Component.onCompleted: {
-                        var saved_audio = StreamingPreferences.audioConfig
-                        currentIndex = 0
-                        for (var i = 0; i < audioListModel.count; i++) {
-                            var el_audio = audioListModel.get(i).val;
-                            if (saved_audio === el_audio) {
-                                currentIndex = i
-                                break
-                            }
-                        }
-                        activated(currentIndex)
+                        settingsPage.selectModelValue(audioComboBox, audioListModel,
+                                                      StreamingPreferences.audioConfig)
                     }
 
                     id: audioComboBox
@@ -953,7 +1171,9 @@ Flickable {
                     font.pointSize: 12
                     checked: !StreamingPreferences.playAudioOnHost
                     onCheckedChanged: {
-                        StreamingPreferences.playAudioOnHost = !checked
+                        if (!StreamingPreferences.applyingProfile) {
+                            StreamingPreferences.playAudioOnHost = !checked
+                        }
                     }
 
                     ToolTip.delay: 1000
@@ -970,7 +1190,9 @@ Flickable {
                     visible: SystemProperties.hasDesktopEnvironment
                     checked: StreamingPreferences.muteOnFocusLoss
                     onCheckedChanged: {
-                        StreamingPreferences.muteOnFocusLoss = checked
+                        if (!StreamingPreferences.applyingProfile) {
+                            StreamingPreferences.muteOnFocusLoss = checked
+                        }
                     }
 
                     ToolTip.delay: 1000
@@ -999,7 +1221,9 @@ Flickable {
                     font.pointSize:  12
                     checked: StreamingPreferences.gameOptimizations
                     onCheckedChanged: {
-                        StreamingPreferences.gameOptimizations = checked
+                        if (!StreamingPreferences.applyingProfile) {
+                            StreamingPreferences.gameOptimizations = checked
+                        }
                     }
                 }
 
@@ -1575,16 +1799,8 @@ Flickable {
                 AutoResizingComboBox {
                     // ignore setting the index at first, and actually set it when the component is loaded
                     Component.onCompleted: {
-                        var saved_vds = StreamingPreferences.videoDecoderSelection
-                        currentIndex = 0
-                        for (var i = 0; i < decoderListModel.count; i++) {
-                            var el_vds = decoderListModel.get(i).val;
-                            if (saved_vds === el_vds) {
-                                currentIndex = i
-                                break
-                            }
-                        }
-                        activated(currentIndex)
+                        settingsPage.selectModelValue(decoderComboBox, decoderListModel,
+                                                      StreamingPreferences.videoDecoderSelection)
                     }
 
                     id: decoderComboBox
@@ -1623,24 +1839,13 @@ Flickable {
                 AutoResizingComboBox {
                     // ignore setting the index at first, and actually set it when the component is loaded
                     Component.onCompleted: {
-                        var saved_vcc = StreamingPreferences.videoCodecConfig
-
-                        // Default to Automatic (relevant if HDR is enabled,
-                        // where we will match none of the codecs in the list)
-                        currentIndex = 0
-
-                        if (StreamingPreferences.isPyroWaveAvailable() && codecListModel.count === 4) {
+                        if ((StreamingPreferences.isPyroWaveAvailable() ||
+                                StreamingPreferences.videoCodecConfig === StreamingPreferences.VCC_FORCE_PYROWAVE) &&
+                                codecListModel.count === 4) {
                             codecListModel.append({text: "PyroWave", val: StreamingPreferences.VCC_FORCE_PYROWAVE})
                         }
-                        for(var i = 0; i < codecListModel.count; i++) {
-                            var el_vcc = codecListModel.get(i).val;
-                            if (saved_vcc === el_vcc) {
-                                currentIndex = i
-                                break
-                            }
-                        }
-
-                        activated(currentIndex)
+                        settingsPage.selectModelValue(codecComboBox, codecListModel,
+                                                      StreamingPreferences.videoCodecConfig)
                     }
 
                     id: codecComboBox
@@ -1689,20 +1894,8 @@ Flickable {
                 AutoResizingComboBox {
                     // ignore setting the index at first, and actually set it when the component is loaded
                     Component.onCompleted: {
-                        var saved_rs = StreamingPreferences.rendererSelection
-
-                        // Default to Automatic
-                        currentIndex = 0
-
-                        for(var i = 0; i < rendererListModel.count; i++) {
-                            var el_rs = rendererListModel.get(i).val;
-                            if (saved_rs === el_rs) {
-                                currentIndex = i
-                                break
-                            }
-                        }
-
-                        activated(currentIndex)
+                        settingsPage.selectModelValue(rendererComboBox, rendererListModel,
+                                                      StreamingPreferences.rendererSelection)
                     }
 
                     id: rendererComboBox
@@ -1742,7 +1935,7 @@ Flickable {
                     checked: StreamingPreferences.enableYUV444
                     onCheckedChanged: {
                         // This is called on init, so only reset to default bitrate when checked state changes.
-                        if (StreamingPreferences.enableYUV444 != checked) {
+                        if (!StreamingPreferences.applyingProfile && StreamingPreferences.enableYUV444 != checked) {
                             StreamingPreferences.enableYUV444 = checked
                             if (StreamingPreferences.autoAdjustBitrate) {
                                 StreamingPreferences.bitrateKbps = StreamingPreferences.getDefaultBitrate(StreamingPreferences.width,
@@ -1773,9 +1966,11 @@ Flickable {
 
                     checked: StreamingPreferences.unlockBitrate
                     onCheckedChanged: {
-                        StreamingPreferences.unlockBitrate = checked
-                        StreamingPreferences.bitrateKbps = Math.min(StreamingPreferences.bitrateKbps, slider.to)
-                        slider.value = StreamingPreferences.bitrateKbps
+                        if (!StreamingPreferences.applyingProfile) {
+                            StreamingPreferences.unlockBitrate = checked
+                            StreamingPreferences.bitrateKbps = Math.min(StreamingPreferences.bitrateKbps, slider.to)
+                            slider.value = StreamingPreferences.bitrateKbps
+                        }
                     }
 
                     ToolTip.delay: 1000
@@ -1823,7 +2018,9 @@ Flickable {
                     font.pointSize: 12
                     checked: StreamingPreferences.showPerformanceOverlay
                     onCheckedChanged: {
-                        StreamingPreferences.showPerformanceOverlay = checked
+                        if (!StreamingPreferences.applyingProfile) {
+                            StreamingPreferences.showPerformanceOverlay = checked
+                        }
                     }
 
                     ToolTip.delay: 1000

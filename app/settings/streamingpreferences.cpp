@@ -7,7 +7,11 @@
 #include <QCoreApplication>
 #include <QLocale>
 #include <QReadWriteLock>
+#include <QRegularExpression>
+#include <QUuid>
 #include <QtMath>
+
+#include <algorithm>
 
 #include <QtDebug>
 
@@ -53,6 +57,12 @@
 #define SER_KEEPAWAKE "keepawake"
 #define SER_LANGUAGE "language"
 #define SER_RENDERER "renderer"
+
+#define SER_PROFILE_VERSION "profiles/version"
+#define SER_ACTIVE_PROFILE "activeProfileId"
+#define PROFILE_VERSION 1
+
+static const QString DEFAULT_PROFILE_ID = QStringLiteral("default");
 
 #define CURRENT_DEFAULT_VER 2
 
@@ -103,26 +113,21 @@ StreamingPreferences* StreamingPreferences::get(QQmlEngine *qmlEngine)
     }
 }
 
-void StreamingPreferences::reload()
+void StreamingPreferences::initializeRecommendedFullScreenMode()
 {
-    QSettings settings;
-
-    int defaultVer = settings.value(SER_DEFAULTVER, 0).toInt();
-
 #ifdef Q_OS_DARWIN
     recommendedFullScreenMode = WindowMode::WM_FULLSCREEN_DESKTOP;
 #else
     // Wayland doesn't support modesetting, so use fullscreen desktop mode
-    // unless we have a slow GPU (which can take advantage of wp_viewporter
-    // to reduce GPU load with lower resolution video streams).
-    if (WMUtils::isRunningWayland() && !WMUtils::isGpuSlow()) {
-        recommendedFullScreenMode = WindowMode::WM_FULLSCREEN_DESKTOP;
-    }
-    else {
-        recommendedFullScreenMode = WindowMode::WM_FULLSCREEN;
-    }
+    // unless a slow GPU benefits from wp_viewporter scaling.
+    recommendedFullScreenMode = WMUtils::isRunningWayland() && !WMUtils::isGpuSlow() ?
+                                WindowMode::WM_FULLSCREEN_DESKTOP :
+                                WindowMode::WM_FULLSCREEN;
 #endif
+}
 
+void StreamingPreferences::loadLegacySettings(QSettings& settings)
+{
     width = settings.value(SER_WIDTH, 1280).toInt();
     height = settings.value(SER_HEIGHT, 720).toInt();
     fps = settings.value(SER_FPS, 60).toInt();
@@ -134,10 +139,6 @@ void StreamingPreferences::reload()
     autoAdjustBitrate = settings.value(SER_AUTOADJUSTBITRATE, true).toBool();
     const int calculatedDefault = getDefaultBitrate(width, height, fps, enableYUV444,
                                                      videoCodecConfig, enableHdr);
-    // autoAdjustBitrate means "track the default as settings change". Recompute
-    // it on load too, so an old predictive-codec default is not retained after
-    // selecting PyroWave. A manually selected bitrate has this flag cleared and
-    // remains authoritative.
     bitrateKbps = autoAdjustBitrate ? calculatedDefault :
                   settings.value(SER_BITRATE, calculatedDefault).toInt();
     enableVsync = settings.value(SER_VSYNC, true).toBool();
@@ -171,7 +172,6 @@ void StreamingPreferences::reload()
     rendererSelection = static_cast<RendererSelection>(settings.value(SER_RENDERER,
                                                   static_cast<int>(RendererSelection::RS_AUTO)).toInt());
     windowMode = static_cast<WindowMode>(settings.value(SER_WINDOWMODE,
-                                                        // Try to load from the old preference value too
                                                         static_cast<int>(settings.value(SER_FULLSCREEN, true).toBool() ?
                                                                              recommendedFullScreenMode : WindowMode::WM_WINDOWED)).toInt());
     uiDisplayMode = static_cast<UIDisplayMode>(settings.value(SER_UIDISPLAYMODE,
@@ -179,7 +179,20 @@ void StreamingPreferences::reload()
                                                                                                                  : UIDisplayMode::UI_MAXIMIZED)).toInt());
     language = static_cast<Language>(settings.value(SER_LANGUAGE,
                                                     static_cast<int>(Language::LANG_AUTO)).toInt());
+}
 
+void StreamingPreferences::reload()
+{
+    QSettings settings;
+
+    int defaultVer = settings.value(SER_DEFAULTVER, 0).toInt();
+
+    initializeRecommendedFullScreenMode();
+
+    // Load the legacy flat settings first. Before profiles are initialized these
+    // values are the migration source; afterwards only the global subset remains
+    // authoritative and the active profile replaces the session settings below.
+    loadLegacySettings(settings);
 
     // Perform default settings updates as required based on last default version
     if (defaultVer < 1) {
@@ -201,6 +214,8 @@ void StreamingPreferences::reload()
         videoCodecConfig = VCC_AUTO;
         enableHdr = true;
     }
+
+    initializeProfiles(settings);
 }
 
 bool StreamingPreferences::retranslate()
@@ -330,46 +345,460 @@ QString StreamingPreferences::getSuffixFromLanguage(StreamingPreferences::Langua
 void StreamingPreferences::save()
 {
     QSettings settings;
+    saveActiveProfile(settings);
+    saveGlobalSettings(settings);
+    settings.setValue(SER_ACTIVE_PROFILE, m_ActiveProfileId);
+}
 
-    settings.setValue(SER_WIDTH, width);
-    settings.setValue(SER_HEIGHT, height);
-    settings.setValue(SER_FPS, fps);
-    settings.setValue(SER_BITRATE, bitrateKbps);
-    settings.setValue(SER_UNLOCK_BITRATE, unlockBitrate);
-    settings.setValue(SER_AUTOADJUSTBITRATE, autoAdjustBitrate);
-    settings.setValue(SER_VSYNC, enableVsync);
-    settings.setValue(SER_GAMEOPTS, gameOptimizations);
-    settings.setValue(SER_HOSTAUDIO, playAudioOnHost);
+QVariantMap StreamingPreferences::profileSettings() const
+{
+    return {
+        {SER_WIDTH, width},
+        {SER_HEIGHT, height},
+        {SER_FPS, fps},
+        {SER_BITRATE, bitrateKbps},
+        {SER_UNLOCK_BITRATE, unlockBitrate},
+        {SER_AUTOADJUSTBITRATE, autoAdjustBitrate},
+        {SER_VSYNC, enableVsync},
+        {SER_GAMEOPTS, gameOptimizations},
+        {SER_HOSTAUDIO, playAudioOnHost},
+        {SER_FRAMEPACING, framePacing},
+        {SER_PACKETSIZE, packetSize},
+        {SER_SHOWPERFOVERLAY, showPerformanceOverlay},
+        {SER_AUDIOCFG, static_cast<int>(audioConfig)},
+        {SER_HDR, enableHdr},
+        {SER_YUV444, enableYUV444},
+        {SER_VIDEOCFG, static_cast<int>(videoCodecConfig)},
+        {SER_VIDEODEC, static_cast<int>(videoDecoderSelection)},
+        {SER_RENDERER, static_cast<int>(rendererSelection)},
+        {SER_WINDOWMODE, static_cast<int>(windowMode)},
+        {SER_MUTEONFOCUSLOSS, muteOnFocusLoss},
+    };
+}
+
+QVariantMap StreamingPreferences::defaultProfileSettings() const
+{
+    QVariantMap defaults {
+        {SER_WIDTH, 1280},
+        {SER_HEIGHT, 720},
+        {SER_FPS, 60},
+        {SER_UNLOCK_BITRATE, false},
+        {SER_AUTOADJUSTBITRATE, true},
+        {SER_VSYNC, true},
+        {SER_GAMEOPTS, true},
+        {SER_HOSTAUDIO, false},
+        {SER_FRAMEPACING, false},
+        {SER_PACKETSIZE, 0},
+        {SER_SHOWPERFOVERLAY, false},
+        {SER_AUDIOCFG, static_cast<int>(AudioConfig::AC_STEREO)},
+        {SER_HDR, false},
+        {SER_YUV444, false},
+        {SER_VIDEOCFG, static_cast<int>(VideoCodecConfig::VCC_AUTO)},
+        {SER_VIDEODEC, static_cast<int>(VideoDecoderSelection::VDS_AUTO)},
+        {SER_RENDERER, static_cast<int>(RendererSelection::RS_AUTO)},
+        {SER_WINDOWMODE, static_cast<int>(recommendedFullScreenMode)},
+        {SER_MUTEONFOCUSLOSS, false},
+    };
+    defaults.insert(SER_BITRATE, getDefaultBitrate(1280, 720, 60, false, VCC_AUTO, false));
+    return defaults;
+}
+
+QVariantMap StreamingPreferences::readProfileSettings(QSettings& settings,
+                                                       const QString& profileId) const
+{
+    QVariantMap values = defaultProfileSettings();
+    settings.beginGroup(QStringLiteral("profiles/") + profileId);
+    for (auto it = values.begin(); it != values.end(); ++it) {
+        it.value() = settings.value(it.key(), it.value());
+    }
+    settings.endGroup();
+    return values;
+}
+
+void StreamingPreferences::writeProfileSettings(QSettings& settings, const QString& profileId,
+                                                 const QVariantMap& values) const
+{
+    settings.beginGroup(QStringLiteral("profiles/") + profileId);
+    const QVariantMap defaults = defaultProfileSettings();
+    for (auto it = defaults.cbegin(); it != defaults.cend(); ++it) {
+        settings.setValue(it.key(), values.value(it.key(), it.value()));
+    }
+    settings.endGroup();
+}
+
+void StreamingPreferences::applyProfileSettings(const QVariantMap& values)
+{
+    const QVariantMap defaults = defaultProfileSettings();
+    auto value = [&values, &defaults](const char* key) {
+        return values.value(QString::fromLatin1(key), defaults.value(QString::fromLatin1(key)));
+    };
+    auto boundedInt = [&value](const char* key, int minimum, int maximum, int fallback) {
+        bool ok = false;
+        const int result = value(key).toInt(&ok);
+        return ok && result >= minimum && result <= maximum ? result : fallback;
+    };
+
+    width = boundedInt(SER_WIDTH, 1, 16384, 1280);
+    height = boundedInt(SER_HEIGHT, 1, 16384, 720);
+    fps = boundedInt(SER_FPS, 1, 1000, 60);
+    unlockBitrate = value(SER_UNLOCK_BITRATE).toBool();
+    autoAdjustBitrate = value(SER_AUTOADJUSTBITRATE).toBool();
+    enableVsync = value(SER_VSYNC).toBool();
+    gameOptimizations = value(SER_GAMEOPTS).toBool();
+    playAudioOnHost = value(SER_HOSTAUDIO).toBool();
+    framePacing = value(SER_FRAMEPACING).toBool();
+    packetSize = boundedInt(SER_PACKETSIZE, 0, 65535, 0);
+    showPerformanceOverlay = value(SER_SHOWPERFOVERLAY).toBool();
+    muteOnFocusLoss = value(SER_MUTEONFOCUSLOSS).toBool();
+
+    const int audio = boundedInt(SER_AUDIOCFG, AC_STEREO, AC_71_SURROUND, AC_STEREO);
+    audioConfig = static_cast<AudioConfig>(audio);
+    enableHdr = value(SER_HDR).toBool();
+    enableYUV444 = value(SER_YUV444).toBool();
+    int codec = boundedInt(SER_VIDEOCFG, VCC_AUTO, VCC_FORCE_PYROWAVE, VCC_AUTO);
+    if (codec == VCC_FORCE_HEVC_HDR_DEPRECATED) {
+        codec = VCC_AUTO;
+        enableHdr = true;
+    }
+    videoCodecConfig = static_cast<VideoCodecConfig>(codec);
+    videoDecoderSelection = static_cast<VideoDecoderSelection>(
+        boundedInt(SER_VIDEODEC, VDS_AUTO, VDS_FORCE_SOFTWARE, VDS_AUTO));
+    rendererSelection = static_cast<RendererSelection>(
+        boundedInt(SER_RENDERER, RS_AUTO, RS_AVSBDL, RS_AUTO));
+    windowMode = static_cast<WindowMode>(
+        boundedInt(SER_WINDOWMODE, WM_FULLSCREEN, WM_WINDOWED, recommendedFullScreenMode));
+
+    const int defaultBitrate = getDefaultBitrate(width, height, fps, enableYUV444,
+                                                  videoCodecConfig, enableHdr);
+    bitrateKbps = autoAdjustBitrate ? defaultBitrate :
+                  boundedInt(SER_BITRATE, 1, 10000000, defaultBitrate);
+}
+
+void StreamingPreferences::saveActiveProfile(QSettings& settings) const
+{
+    if (!m_ActiveProfileId.isEmpty()) {
+        writeProfileSettings(settings, m_ActiveProfileId, profileSettings());
+    }
+}
+
+void StreamingPreferences::saveGlobalSettings(QSettings& settings) const
+{
     settings.setValue(SER_MULTICONT, multiController);
     settings.setValue(SER_MDNS, enableMdns);
     settings.setValue(SER_QUITAPPAFTER, quitAppAfter);
     settings.setValue(SER_ABSMOUSEMODE, absoluteMouseMode);
     settings.setValue(SER_ABSTOUCHMODE, absoluteTouchMode);
-    settings.setValue(SER_FRAMEPACING, framePacing);
     settings.setValue(SER_CONNWARNINGS, connectionWarnings);
     settings.setValue(SER_CONFWARNINGS, configurationWarnings);
     settings.setValue(SER_RICHPRESENCE, richPresence);
     settings.setValue(SER_GAMEPADMOUSE, gamepadMouse);
-    settings.setValue(SER_PACKETSIZE, packetSize);
     settings.setValue(SER_DETECTNETBLOCKING, detectNetworkBlocking);
-    settings.setValue(SER_SHOWPERFOVERLAY, showPerformanceOverlay);
-    settings.setValue(SER_AUDIOCFG, static_cast<int>(audioConfig));
-    settings.setValue(SER_HDR, enableHdr);
-    settings.setValue(SER_YUV444, enableYUV444);
-    settings.setValue(SER_VIDEOCFG, static_cast<int>(videoCodecConfig));
-    settings.setValue(SER_VIDEODEC, static_cast<int>(videoDecoderSelection));
-    settings.setValue(SER_RENDERER, static_cast<int>(rendererSelection));
-    settings.setValue(SER_WINDOWMODE, static_cast<int>(windowMode));
     settings.setValue(SER_UIDISPLAYMODE, static_cast<int>(uiDisplayMode));
     settings.setValue(SER_LANGUAGE, static_cast<int>(language));
     settings.setValue(SER_DEFAULTVER, CURRENT_DEFAULT_VER);
     settings.setValue(SER_SWAPMOUSEBUTTONS, swapMouseButtons);
-    settings.setValue(SER_MUTEONFOCUSLOSS, muteOnFocusLoss);
     settings.setValue(SER_BACKGROUNDGAMEPAD, backgroundGamepad);
     settings.setValue(SER_REVERSESCROLL, reverseScrollDirection);
     settings.setValue(SER_SWAPFACEBUTTONS, swapFaceButtons);
     settings.setValue(SER_CAPTURESYSKEYS, captureSysKeysMode);
     settings.setValue(SER_KEEPAWAKE, keepAwake);
+}
+
+bool StreamingPreferences::profileExists(QSettings& settings, const QString& profileId) const
+{
+    settings.beginGroup(QStringLiteral("profiles"));
+    const bool exists = settings.childGroups().contains(profileId);
+    settings.endGroup();
+    return exists;
+}
+
+void StreamingPreferences::initializeProfiles(QSettings& settings)
+{
+    if (settings.value(SER_PROFILE_VERSION, 0).toInt() != PROFILE_VERSION) {
+        // The flat keys are read immediately before this function. Capture them
+        // exactly once as the Default profile, then make the profile tree the
+        // sole source of truth for session settings.
+        settings.remove(QStringLiteral("profiles"));
+        settings.setValue(QStringLiteral("profiles/default/name"), QStringLiteral("Default"));
+        writeProfileSettings(settings, DEFAULT_PROFILE_ID, profileSettings());
+        settings.setValue(SER_ACTIVE_PROFILE, DEFAULT_PROFILE_ID);
+        settings.setValue(SER_PROFILE_VERSION, PROFILE_VERSION);
+        settings.sync();
+    }
+    else if (!profileExists(settings, DEFAULT_PROFILE_ID)) {
+        // Recover from a damaged profile tree without allowing Default to vanish.
+        settings.setValue(QStringLiteral("profiles/default/name"), QStringLiteral("Default"));
+        writeProfileSettings(settings, DEFAULT_PROFILE_ID, defaultProfileSettings());
+    }
+
+    QString activeId = settings.value(SER_ACTIVE_PROFILE, DEFAULT_PROFILE_ID).toString();
+    if (!profileExists(settings, activeId)) {
+        activeId = DEFAULT_PROFILE_ID;
+        settings.setValue(SER_ACTIVE_PROFILE, activeId);
+    }
+
+    m_ActiveProfileId = activeId;
+    refreshProfiles(settings);
+    if (!loadProfile(settings, activeId, false)) {
+        m_ActiveProfileId = DEFAULT_PROFILE_ID;
+        settings.setValue(SER_ACTIVE_PROFILE, m_ActiveProfileId);
+        loadProfile(settings, m_ActiveProfileId, false);
+        refreshProfiles(settings);
+    }
+}
+
+void StreamingPreferences::refreshProfiles(QSettings& settings)
+{
+    struct ProfileEntry {
+        QString id;
+        QString name;
+    };
+    QList<ProfileEntry> entries;
+    QStringList usedNames;
+
+    settings.beginGroup(QStringLiteral("profiles"));
+    QStringList groups = settings.childGroups();
+    groups.removeAll(DEFAULT_PROFILE_ID);
+    groups.prepend(DEFAULT_PROFILE_ID);
+    for (const QString& id : groups) {
+        settings.beginGroup(id);
+        QString name = settings.value(QStringLiteral("name")).toString().trimmed();
+        settings.endGroup();
+
+        if (id == DEFAULT_PROFILE_ID) {
+            name = QStringLiteral("Default");
+        }
+        if (name.isEmpty() || name.size() > 64 ||
+                name.contains(QRegularExpression(QStringLiteral("[\\x00-\\x1f\\x7f]")))) {
+            name = tr("Profile");
+        }
+
+        const QString baseName = name;
+        int suffix = 2;
+        while (std::any_of(usedNames.cbegin(), usedNames.cend(), [&name](const QString& existing) {
+            return existing.compare(name, Qt::CaseInsensitive) == 0;
+        })) {
+            name = tr("%1 (%2)").arg(baseName).arg(suffix++);
+        }
+        usedNames.append(name);
+        settings.setValue(id + QStringLiteral("/name"), name);
+        entries.append({id, name});
+    }
+    settings.endGroup();
+
+    std::sort(entries.begin(), entries.end(), [](const ProfileEntry& left, const ProfileEntry& right) {
+        if (left.id == DEFAULT_PROFILE_ID) return true;
+        if (right.id == DEFAULT_PROFILE_ID) return false;
+        return QString::localeAwareCompare(left.name, right.name) < 0;
+    });
+
+    m_ProfileIds.clear();
+    m_ProfileNames.clear();
+    m_ActiveProfileName.clear();
+    for (const ProfileEntry& entry : entries) {
+        m_ProfileIds.append(entry.id);
+        m_ProfileNames.append(entry.name);
+        if (entry.id == m_ActiveProfileId) {
+            m_ActiveProfileName = entry.name;
+        }
+    }
+}
+
+bool StreamingPreferences::loadProfile(QSettings& settings, const QString& profileId, bool notify)
+{
+    if (!profileExists(settings, profileId)) {
+        return false;
+    }
+
+    const QVariantMap oldValues = profileSettings();
+    applyProfileSettings(readProfileSettings(settings, profileId));
+    if (notify) {
+        emitProfileSettingChanges(oldValues, profileSettings());
+        emit profileLoaded();
+    }
+    return true;
+}
+
+void StreamingPreferences::emitProfileSettingChanges(const QVariantMap& oldValues,
+                                                       const QVariantMap& newValues)
+{
+    m_ApplyingProfile = true;
+    emit applyingProfileChanged();
+
+    auto changed = [&oldValues, &newValues](const char* key) {
+        const QString stringKey = QString::fromLatin1(key);
+        return oldValues.value(stringKey) != newValues.value(stringKey);
+    };
+
+    if (changed(SER_WIDTH) || changed(SER_HEIGHT) || changed(SER_FPS)) emit displayModeChanged();
+    if (changed(SER_BITRATE)) emit bitrateChanged();
+    if (changed(SER_UNLOCK_BITRATE)) emit unlockBitrateChanged();
+    if (changed(SER_AUTOADJUSTBITRATE)) emit autoAdjustBitrateChanged();
+    if (changed(SER_VSYNC)) emit enableVsyncChanged();
+    if (changed(SER_GAMEOPTS)) emit gameOptimizationsChanged();
+    if (changed(SER_HOSTAUDIO)) emit playAudioOnHostChanged();
+    if (changed(SER_FRAMEPACING)) emit framePacingChanged();
+    if (changed(SER_SHOWPERFOVERLAY)) emit showPerformanceOverlayChanged();
+    if (changed(SER_AUDIOCFG)) emit audioConfigChanged();
+    if (changed(SER_HDR)) emit enableHdrChanged();
+    if (changed(SER_YUV444)) emit enableYUV444Changed();
+    if (changed(SER_VIDEOCFG)) emit videoCodecConfigChanged();
+    if (changed(SER_VIDEODEC)) emit videoDecoderSelectionChanged();
+    if (changed(SER_RENDERER)) emit rendererSelectionChanged();
+    if (changed(SER_WINDOWMODE)) emit windowModeChanged();
+    if (changed(SER_MUTEONFOCUSLOSS)) emit muteOnFocusLossChanged();
+
+    m_ApplyingProfile = false;
+    emit applyingProfileChanged();
+}
+
+void StreamingPreferences::setProfileError(const QString& error)
+{
+    if (m_LastProfileError != error) {
+        m_LastProfileError = error;
+        emit lastProfileErrorChanged();
+    }
+}
+
+bool StreamingPreferences::validateProfileName(const QString& name, const QString& excludingId)
+{
+    const QString trimmed = name.trimmed();
+    if (trimmed.isEmpty()) {
+        setProfileError(tr("Profile name cannot be empty."));
+        return false;
+    }
+    if (trimmed.size() > 64) {
+        setProfileError(tr("Profile names cannot be longer than 64 characters."));
+        return false;
+    }
+    if (trimmed.contains(QRegularExpression(QStringLiteral("[\\x00-\\x1f\\x7f]")))) {
+        setProfileError(tr("Profile name contains invalid characters."));
+        return false;
+    }
+    for (int i = 0; i < m_ProfileIds.size(); ++i) {
+        if (m_ProfileIds.at(i) != excludingId &&
+                m_ProfileNames.at(i).compare(trimmed, Qt::CaseInsensitive) == 0) {
+            setProfileError(tr("A profile with that name already exists."));
+            return false;
+        }
+    }
+    setProfileError(QString());
+    return true;
+}
+
+bool StreamingPreferences::createProfile(const QString& name)
+{
+    if (!validateProfileName(name)) return false;
+
+    QSettings settings;
+    saveActiveProfile(settings);
+    const QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    settings.setValue(QStringLiteral("profiles/") + id + QStringLiteral("/name"), name.trimmed());
+    writeProfileSettings(settings, id, profileSettings());
+    m_ActiveProfileId = id;
+    settings.setValue(SER_ACTIVE_PROFILE, id);
+    refreshProfiles(settings);
+    emit profilesChanged();
+    emit activeProfileChanged();
+    emit profileLoaded();
+    return true;
+}
+
+bool StreamingPreferences::duplicateProfile(const QString& sourceProfileId, const QString& name)
+{
+    if (!m_ProfileIds.contains(sourceProfileId)) {
+        setProfileError(tr("The selected profile no longer exists."));
+        return false;
+    }
+    if (!validateProfileName(name)) return false;
+
+    QSettings settings;
+    saveActiveProfile(settings);
+    const QVariantMap oldValues = profileSettings();
+    const QVariantMap copiedValues = sourceProfileId == m_ActiveProfileId ?
+                                     oldValues : readProfileSettings(settings, sourceProfileId);
+    const QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    settings.setValue(QStringLiteral("profiles/") + id + QStringLiteral("/name"), name.trimmed());
+    writeProfileSettings(settings, id, copiedValues);
+    applyProfileSettings(copiedValues);
+    m_ActiveProfileId = id;
+    settings.setValue(SER_ACTIVE_PROFILE, id);
+    refreshProfiles(settings);
+    emitProfileSettingChanges(oldValues, profileSettings());
+    emit profilesChanged();
+    emit activeProfileChanged();
+    emit profileLoaded();
+    return true;
+}
+
+bool StreamingPreferences::renameProfile(const QString& profileId, const QString& name)
+{
+    if (profileId == DEFAULT_PROFILE_ID) {
+        setProfileError(tr("The Default profile cannot be renamed."));
+        return false;
+    }
+    if (!m_ProfileIds.contains(profileId)) {
+        setProfileError(tr("The selected profile no longer exists."));
+        return false;
+    }
+    if (!validateProfileName(name, profileId)) return false;
+
+    QSettings settings;
+    settings.setValue(QStringLiteral("profiles/") + profileId + QStringLiteral("/name"), name.trimmed());
+    refreshProfiles(settings);
+    emit profilesChanged();
+    if (profileId == m_ActiveProfileId) emit activeProfileChanged();
+    return true;
+}
+
+bool StreamingPreferences::deleteProfile(const QString& profileId)
+{
+    if (profileId == DEFAULT_PROFILE_ID) {
+        setProfileError(tr("The Default profile cannot be deleted."));
+        return false;
+    }
+    if (!m_ProfileIds.contains(profileId)) {
+        setProfileError(tr("The selected profile no longer exists."));
+        return false;
+    }
+
+    if (profileId == m_ActiveProfileId && !activateProfile(DEFAULT_PROFILE_ID)) {
+        return false;
+    }
+    QSettings settings;
+    settings.remove(QStringLiteral("profiles/") + profileId);
+    refreshProfiles(settings);
+    setProfileError(QString());
+    emit profilesChanged();
+    return true;
+}
+
+bool StreamingPreferences::activateProfile(const QString& profileId)
+{
+    if (!m_ProfileIds.contains(profileId)) {
+        setProfileError(tr("The selected profile no longer exists."));
+        return false;
+    }
+    if (profileId == m_ActiveProfileId) {
+        setProfileError(QString());
+        return true;
+    }
+
+    QSettings settings;
+    saveActiveProfile(settings);
+    const QVariantMap oldValues = profileSettings();
+    if (!loadProfile(settings, profileId, false)) {
+        setProfileError(tr("The selected profile could not be loaded."));
+        return false;
+    }
+    m_ActiveProfileId = profileId;
+    settings.setValue(SER_ACTIVE_PROFILE, profileId);
+    refreshProfiles(settings);
+    setProfileError(QString());
+    emitProfileSettingChanges(oldValues, profileSettings());
+    emit activeProfileChanged();
+    emit profileLoaded();
+    return true;
 }
 
 int StreamingPreferences::getDefaultBitrate(int width, int height, int fps, bool yuv444,
