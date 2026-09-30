@@ -746,7 +746,7 @@ void SdlInputHandler::handleControllerDeviceEvent(SDL_ControllerDeviceEvent* eve
         if (isEdge) {
             // Keep the PS family even with SDL builds that don't yet identify Edge.
             type = LI_CTYPE_PS;
-            capabilities |= LI_CCAP_DUALSENSE_EDGE;
+            capabilities |= GamepadIdentity::DualSenseEdgeCapability;
             if ((supportedButtonFlags & GamepadIdentity::EdgeButtons) != GamepadIdentity::EdgeButtons) {
                 SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
                             "DualSense Edge SDL mapping lacks one or more native extra controls; update SDL (2.28+) or controller mapping");

@@ -2,7 +2,7 @@
 #undef NDEBUG
 #endif
 #include "streaming/input/gamepadidentity.h"
-#include <SDL_gamecontroller.h>
+#include <SDL.h>
 #include <cassert>
 
 int main()
@@ -24,7 +24,7 @@ int main()
         assert(ButtonMap[i] == ordinary[i]);
     }
     assert(ButtonMap[SDL_CONTROLLER_BUTTON_TOUCHPAD] == TOUCHPAD_FLAG);
-    assert(LI_CCAP_DUALSENSE_EDGE == 0x200);
+    assert(DualSenseEdgeCapability == 0x200);
 
 #if SDL_VERSION_ATLEAST(2, 24, 0)
     // Exercise normalized SDL events and advertised buttons without hardware.
