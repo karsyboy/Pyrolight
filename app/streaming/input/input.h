@@ -250,5 +250,4 @@ private:
     char m_DragButton;
     int m_NumFingersDown;
 
-    static const int k_ButtonMap[];
 };

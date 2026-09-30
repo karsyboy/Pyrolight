@@ -4,6 +4,7 @@
 #include "SDL_compat.h"
 #include "settings/mappingmanager.h"
 #include "utils.h"
+#include "gamepadidentity.h"
 
 #include <QtMath>
 
@@ -23,17 +24,6 @@
 #define ML_HAPTIC_GC_RUMBLE         (1U << 16)
 #define ML_HAPTIC_SIMPLE_RUMBLE     (1U << 17)
 #define ML_HAPTIC_GC_TRIGGER_RUMBLE (1U << 18)
-
-const int SdlInputHandler::k_ButtonMap[] = {
-    A_FLAG, B_FLAG, X_FLAG, Y_FLAG,
-    BACK_FLAG, SPECIAL_FLAG, PLAY_FLAG,
-    LS_CLK_FLAG, RS_CLK_FLAG,
-    LB_FLAG, RB_FLAG,
-    UP_FLAG, DOWN_FLAG, LEFT_FLAG, RIGHT_FLAG,
-    MISC_FLAG,
-    PADDLE1_FLAG, PADDLE2_FLAG, PADDLE3_FLAG, PADDLE4_FLAG,
-    TOUCHPAD_FLAG,
-};
 
 GamepadState*
 SdlInputHandler::findStateForGamepad(SDL_JoystickID id)
@@ -276,7 +266,7 @@ void SdlInputHandler::handleControllerAxisEvent(SDL_ControllerAxisEvent* event)
 
 void SdlInputHandler::handleControllerButtonEvent(SDL_ControllerButtonEvent* event)
 {
-    if (event->button >= SDL_arraysize(k_ButtonMap)) {
+    if (event->button >= SDL_arraysize(GamepadIdentity::ButtonMap)) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
                     "No mapping for gamepad button: %u",
                     event->button);
@@ -306,7 +296,7 @@ void SdlInputHandler::handleControllerButtonEvent(SDL_ControllerButtonEvent* eve
     }
 
     if (event->state == SDL_PRESSED) {
-        state->buttons |= k_ButtonMap[event->button];
+        state->buttons |= GamepadIdentity::ButtonMap[event->button];
 
         if (event->button == SDL_CONTROLLER_BUTTON_START) {
             state->lastStartDownTime = SDL_GetTicks();
@@ -342,7 +332,7 @@ void SdlInputHandler::handleControllerButtonEvent(SDL_ControllerButtonEvent* eve
         }
     }
     else {
-        state->buttons &= ~k_ButtonMap[event->button];
+        state->buttons &= ~GamepadIdentity::ButtonMap[event->button];
 
         if (event->button == SDL_CONTROLLER_BUTTON_START) {
             if (SDL_GetTicks() - state->lastStartDownTime > MOUSE_EMULATION_LONG_PRESS_TIME) {
@@ -666,9 +656,9 @@ void SdlInputHandler::handleControllerDeviceEvent(SDL_ControllerDeviceEvent* eve
         // On SDL 2.0.14 and later, we can provide enhanced controller information to the host PC
         // for it to use as a hint for the type of controller to emulate.
         uint32_t supportedButtonFlags = 0;
-        for (int i = 0; i < (int)SDL_arraysize(k_ButtonMap); i++) {
+        for (int i = 0; i < (int)SDL_arraysize(GamepadIdentity::ButtonMap); i++) {
             if (SDL_GameControllerHasButton(state->controller, (SDL_GameControllerButton)i)) {
-                supportedButtonFlags |= k_ButtonMap[i];
+                supportedButtonFlags |= GamepadIdentity::ButtonMap[i];
             }
         }
 
@@ -752,6 +742,17 @@ void SdlInputHandler::handleControllerDeviceEvent(SDL_ControllerDeviceEvent* eve
             break;
         }
 
+        const bool isEdge = GamepadIdentity::isDualSenseEdge(vendorId, productId);
+        if (isEdge) {
+            // Keep the PS family even with SDL builds that don't yet identify Edge.
+            type = LI_CTYPE_PS;
+            capabilities |= LI_CCAP_DUALSENSE_EDGE;
+            if ((supportedButtonFlags & GamepadIdentity::EdgeButtons) != GamepadIdentity::EdgeButtons) {
+                SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                            "DualSense Edge SDL mapping lacks one or more native extra controls; update SDL (2.28+) or controller mapping");
+            }
+        }
+
         // If this is a PlayStation controller that doesn't have a touchpad button mapped,
         // we'll allow the Select+PS button combo to act as the touchpad.
         state->clickpadButtonEmulationEnabled =
@@ -760,6 +761,10 @@ void SdlInputHandler::handleControllerDeviceEvent(SDL_ControllerDeviceEvent* eve
 #endif
             type == LI_CTYPE_PS;
 
+        SDL_LogDebug(SDL_LOG_CATEGORY_APPLICATION,
+                     "Controller arrival: %s VID/PID=%04x/%04x SDL type=%d family=%u Edge=%d buttons=%08x capabilities=%04x",
+                     name ? name : "<null>", vendorId, productId,
+                     SDL_GameControllerGetType(controller), type, isEdge, supportedButtonFlags, capabilities);
         LiSendControllerArrivalEvent(state->index, m_GamepadMask, type, supportedButtonFlags, capabilities);
 #else
 

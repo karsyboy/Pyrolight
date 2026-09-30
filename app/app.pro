@@ -229,6 +229,7 @@ HEADERS += \
     settings/streamingpreferences.h \
     settings/bitratecalculator.h \
     streaming/input/input.h \
+    streaming/input/gamepadidentity.h \
     streaming/session.h \
     streaming/audio/renderers/renderer.h \
     streaming/audio/renderers/sdl.h \
