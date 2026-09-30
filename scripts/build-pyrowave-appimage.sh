@@ -26,6 +26,16 @@ fi
 [ "$(git -C "$PYROWAVE_SOURCE/Granite" rev-parse HEAD 2>/dev/null)" = "1b2d1801d2910fb09ebcded2f0bb3a3a781103b5" ] || \
   fail "PyroWave's pinned Granite checkout is missing or incorrect"
 
+# Apply the audited, wire-compatible fixes to the pinned dependency.
+patch_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/pyrowave-patches" && pwd)"
+for patch in "$patch_dir"/*.patch; do
+  if git -C "${PYROWAVE_SOURCE}" apply --check "$patch"; then
+    git -C "${PYROWAVE_SOURCE}" apply "$patch"
+  else
+    git -C "${PYROWAVE_SOURCE}" apply --reverse --check "$patch"
+  fi
+done
+
 cmake -S "$PYROWAVE_SOURCE" -B "$PYROWAVE_BUILD" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX="$PYROWAVE_PREFIX" \

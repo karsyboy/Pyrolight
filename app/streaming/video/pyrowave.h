@@ -77,6 +77,7 @@ private:
     std::mutex m_Mutex;
     std::condition_variable m_FrameReady;
     std::thread m_RenderThread;
+    std::vector<uint8_t> m_BlockSeen;
     std::vector<uint32_t> m_Pending;
     std::vector<uint32_t> m_Spare;
     size_t m_PendingSize = 0;

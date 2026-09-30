@@ -1,4 +1,6 @@
 #include "pyrowave.h"
+#include "pyrowavecolor.h"
+#include "pyrowaveframe.h"
 #include <PyroWave.h>
 #include "streaming/session.h"
 #include "streaming/streamutils.h"
@@ -441,11 +443,10 @@ bool PyroWaveVideoDecoder::decodeFrame(const std::vector<uint32_t>& bytes, size_
 {
     if (size < 8 || size > PYROWAVE_MAX_FRAME_BYTES || size > bytes.size() * sizeof(uint32_t)) return false;
     // Sequence header metadata is used directly; no assumptions about bit depth.
-    const uint32_t a = qFromLittleEndian(bytes[0]), b = qFromLittleEndian(bytes[1]);
-    if (!(a >> 31) || ((b >> 24) & 3) || int((a & 0x3fff) + 1) != m_Width ||
-        int(((a >> 14) & 0x3fff) + 1) != m_Height ||
-        bool(b & (1u << 26)) != bool(m_Format & VIDEO_FORMAT_PYROWAVE_444) ||
-        bool(b & (1u << 28)) != bool(m_Format & VIDEO_FORMAT_PYROWAVE_HDR)) return false;
+    const uint32_t b = qFromLittleEndian(bytes[1]);
+    if (!pyroWaveValidateFrame(reinterpret_cast<const uint8_t*>(bytes.data()), size, m_Width, m_Height,
+                              m_Format & VIDEO_FORMAT_PYROWAVE_444,
+                              m_Format & VIDEO_FORMAT_PYROWAVE_HDR, m_BlockSeen)) return false;
     pyrowave_decoder_clear(m_Decoder);
     if (pyrowave_decoder_push_packet(m_Decoder, bytes.data(), size) != PYROWAVE_SUCCESS ||
         !pyrowave_decoder_decode_is_ready(m_Decoder, false)) return false;
@@ -483,11 +484,9 @@ bool PyroWaveVideoDecoder::decodeFrame(const std::vector<uint32_t>& bytes, size_
     pl_frame frame {};
     frame.num_planes = 3;
     frame.crop = {0, 0, float(m_Width), float(m_Height)};
-    frame.repr.bits.sample_depth = frame.repr.bits.color_depth = 16;
-    frame.repr.sys = b & (1u << 29) ? PL_COLOR_SYSTEM_BT_2020_NC : PL_COLOR_SYSTEM_BT_709;
-    frame.repr.levels = b & (1u << 30) ? PL_COLOR_LEVELS_LIMITED : PL_COLOR_LEVELS_FULL;
+    frame.repr = pyroWaveColorRepresentation(b & (1u << 28), b & (1u << 30), b & (1u << 29));
     frame.color.primaries = b & (1u << 27) ? PL_COLOR_PRIM_BT_2020 : PL_COLOR_PRIM_BT_709;
-    frame.color.transfer = b & (1u << 28) ? PL_COLOR_TRC_PQ : PL_COLOR_TRC_BT_1886;
+    frame.color.transfer = pyroWaveTransferFunction(b & (1u << 28));
     if ((m_Format & VIDEO_FORMAT_PYROWAVE_HDR) && m_OverlayAttached) {
         SS_HDR_METADATA metadata {};
         if (LiGetHdrMetadata(&metadata)) {

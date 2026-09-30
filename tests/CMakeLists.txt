@@ -18,3 +18,18 @@ foreach(protocol_version IN ITEMS old new)
     endif()
     add_test(NAME gamepad-capability-${protocol_version} COMMAND gamepad-capability-${protocol_version})
 endforeach()
+
+pkg_check_modules(PLACEBO REQUIRED IMPORTED_TARGET libplacebo)
+add_executable(pyrowave-color pyrowave_color.cpp)
+target_compile_features(pyrowave-color PRIVATE cxx_std_11)
+target_include_directories(pyrowave-color PRIVATE ../app)
+target_link_libraries(pyrowave-color PRIVATE PkgConfig::PLACEBO)
+# assert() is the test oracle, including in Release builds.
+target_compile_options(pyrowave-color PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG> $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG>)
+add_test(NAME pyrowave-color COMMAND pyrowave-color)
+
+add_executable(pyrowave-frame pyrowave_frame.cpp)
+target_compile_features(pyrowave-frame PRIVATE cxx_std_11)
+target_include_directories(pyrowave-frame PRIVATE ../app)
+target_compile_options(pyrowave-frame PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG> $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG>)
+add_test(NAME pyrowave-frame COMMAND pyrowave-frame)

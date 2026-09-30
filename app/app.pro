@@ -608,7 +608,7 @@ enable-pyrowave {
 
     DEFINES += HAVE_PYROWAVE
     SOURCES += streaming/video/pyrowave.cpp
-    HEADERS += streaming/video/pyrowave.h
+    HEADERS += streaming/video/pyrowave.h streaming/video/pyrowavecolor.h streaming/video/pyrowaveframe.h
 }
 
 pyrowave-smoke-test {

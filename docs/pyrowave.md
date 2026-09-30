@@ -130,3 +130,21 @@ its historical name for compatibility.
 
 The smoke test verifies GPU encoding, decoding, and rendering; it cannot verify
 physical HDR luminance or end-to-end network behavior.
+
+
+### Audited dependency patches and SDR transfer
+
+The pinned PyroWave/Granite sources require the patches in
+`scripts/pyrowave-patches/`: full-resolution 4:4:4 payload allocation and
+200-nit normalization when converting PQ/scRGB into SDR. The AppImage builder
+and Windows release workflow apply these patches. For manual library builds,
+apply them from the PyroWave source root after `./checkout_granite.sh` and before
+CMake. Do not change the source pins independently on the host and client.
+
+Wire version 1 SDR pixels use the scaler's sRGB transfer function with BT.709
+primaries and matrix. Its bitstream SDR/PQ transfer bit alone cannot distinguish
+sRGB from other SDR transfer functions. The native renderer therefore uses
+libplacebo's sRGB transfer for this protocol. Decoded planes are normalized
+floats stored in R16_UNORM: their libplacebo sample and color depths must both
+be 8 for SDR, or both 10 for HDR, without a 65535/255 or 65535/1023 rescale.
+Ten-bit SDR and limited-range streams remain unsupported by this host protocol.
