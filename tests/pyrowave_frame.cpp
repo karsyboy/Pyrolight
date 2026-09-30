@@ -1,4 +1,18 @@
+#ifdef TEST_WINDOWS_MINMAX
+// Windows headers may precede this helper in production. Standard-library
+// declarations are loaded first, just as they are in that include order.
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <vector>
+#define min(a, b) (((a) < (b)) ? (a) : (b))
+#define max(a, b) (((a) > (b)) ? (a) : (b))
+#endif
 #include "streaming/video/pyrowaveframe.h"
+#ifdef TEST_WINDOWS_MINMAX
+#undef min
+#undef max
+#endif
 #include <cassert>
 #include <cstdio>
 

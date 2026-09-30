@@ -11,8 +11,9 @@ inline uint32_t pyroWaveReadWord(const uint8_t* data)
 
 inline unsigned pyroWaveMaxBlocks(unsigned width, unsigned height, bool chroma444)
 {
-    width = std::max(128u, (width + 31) & ~31u);
-    height = std::max(128u, (height + 31) & ~31u);
+    // Parentheses prevent Windows min/max macros from expanding this call.
+    width = (std::max)(128u, (width + 31) & ~31u);
+    height = (std::max)(128u, (height + 31) & ~31u);
     unsigned blocks = 0;
     // Matches the pinned codec's five wavelet decomposition levels.
     for (unsigned level = 0; level < 5; level++) {
