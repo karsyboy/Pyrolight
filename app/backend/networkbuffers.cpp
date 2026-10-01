@@ -17,8 +17,10 @@
 #include <winsock2.h>
 #include <windows.h>
 #include <iphlpapi.h>
+#include <netioapi.h>
 #include <shellapi.h>
 
+#include <string>
 #include <thread>
 #include <vector>
 #endif
@@ -89,10 +91,10 @@ QStringList applyCommand()
     if (host.isNull()) return 0;
     QUdpSocket route; route.connectToHost(host, 9);
     if (!route.waitForConnected(200)) return 0;
-    for (const auto& interface : QNetworkInterface::allInterfaces()) {
-        if (!(interface.flags() & QNetworkInterface::IsUp) || (interface.flags() & QNetworkInterface::IsLoopBack)) continue;
-        for (const auto& entry : interface.addressEntries())
-            if (entry.ip() == route.localAddress()) return interface.index();
+    for (const auto& netInterface : QNetworkInterface::allInterfaces()) {
+        if (!(netInterface.flags() & QNetworkInterface::IsUp) || (netInterface.flags() & QNetworkInterface::IsLoopBack)) continue;
+        for (const auto& entry : netInterface.addressEntries())
+            if (entry.ip() == route.localAddress()) return netInterface.index();
     }
     return 0;
 }
@@ -296,9 +298,9 @@ QString NetworkBuffers::routedLinkType(const QHostAddress& host)
 {
     const int index = routedInterfaceIndex(host);
     if (index <= 0) return tr("unknown");
-    const auto interface = QNetworkInterface::interfaceFromIndex(index);
+    const auto netInterface = QNetworkInterface::interfaceFromIndex(index);
 #ifdef Q_OS_LINUX
-    const QDir path(QStringLiteral("/sys/class/net/%1").arg(interface.name()));
+    const QDir path(QStringLiteral("/sys/class/net/%1").arg(netInterface.name()));
     if (!path.exists(QStringLiteral("device"))) return tr("virtual or unknown");
     if (path.exists(QStringLiteral("wireless")) || path.exists(QStringLiteral("phy80211"))) return tr("Wi-Fi");
     QFile type(path.filePath(QStringLiteral("type")));
