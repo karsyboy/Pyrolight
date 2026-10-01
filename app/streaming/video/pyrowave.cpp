@@ -1,3 +1,4 @@
+#include "pyrowaveframing.h"
 #include "pyrowave.h"
 #include "pyrowavecolor.h"
 #include "pyrowaveframe.h"
@@ -182,6 +183,7 @@ bool PyroWaveVideoDecoder::initialize(PDECODER_PARAMETERS params)
     m_Width = params->width;
     m_Height = params->height;
     m_Format = params->videoFormat;
+    m_Dialect = LiGetPyroWaveDialect();
     m_Window = params->window;
     m_Renderer = std::make_unique<PlVkRenderer>();
     if (!m_Renderer->initialize(params) || !borrowDevice()) {
@@ -192,7 +194,8 @@ bool PyroWaveVideoDecoder::initialize(PDECODER_PARAMETERS params)
     info.device = m_Device;
     info.width = m_Width;
     info.height = m_Height;
-    info.chroma = m_Format & VIDEO_FORMAT_PYROWAVE_444 ? PYROWAVE_CHROMA_SUBSAMPLING_444 : PYROWAVE_CHROMA_SUBSAMPLING_420;
+    const auto profile = LiPyroWaveProfile(m_Format);
+    info.chroma = profile.chroma444 ? PYROWAVE_CHROMA_SUBSAMPLING_444 : PYROWAVE_CHROMA_SUBSAMPLING_420;
     bool fragmentOverrideSet = false;
     const int fragmentOverride = qEnvironmentVariableIntValue("PYROWAVE_FRAGMENT_PATH", &fragmentOverrideSet);
     m_FragmentPath = fragmentOverrideSet ? fragmentOverride != 0 :
@@ -350,12 +353,37 @@ int PyroWaveVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
     }
     frame.resize((du->fullLength + 3) / 4);
     size_t offset = 0;
+    std::vector<PyroWaveFraming::Segment> segments;
+    const bool recordMode = m_Dialect == PYROWAVE_DIALECT_RECORD_FRAMED;
     for (auto entry = du->bufferList; entry; entry = entry->next) {
         if (entry->length <= 0 || size_t(entry->length) > size_t(du->fullLength) - offset) return DR_OK;
+        if (recordMode) segments.push_back({offset, size_t(entry->length), entry->bufferType == BUFFER_TYPE_LOST, entry->bufferType == BUFFER_TYPE_RECORD_START});
         memcpy(reinterpret_cast<uint8_t*>(frame.data()) + offset, entry->data, entry->length);
         offset += entry->length;
     }
     if (offset != size_t(du->fullLength)) return DR_OK;
+    size_t frameSize = offset;
+    if (recordMode) {
+        PyroWaveFraming::Frame parsed;
+        std::string error;
+        auto* data = reinterpret_cast<uint8_t*>(frame.data());
+        if (!PyroWaveFraming::parse(data, frameSize, segments, du->pyrowaveCriticalPackets,
+            {m_Width, m_Height, bool(m_Format & VIDEO_FORMAT_PYROWAVE_444)}, parsed, error) ||
+            !parsed.coarseLevelIntact) return DR_OK;
+        size_t write = 0;
+        for (const auto& span : parsed.spans) {
+            std::memmove(data + write, data + span.offset, span.size);
+            write += span.size;
+        }
+        // Clear() zeros absent coefficients. Count only received records so
+        // the authoritative decoder can finish an explicitly salvaged frame.
+        if (write < 8 || parsed.blockRecords > 0xffffff) return DR_OK;
+        uint32_t header = pyroWaveReadWord(data + 4);
+        header = (header & 0xff000000) | parsed.blockRecords;
+        for (unsigned i = 0; i < 4; ++i) data[4+i] = uint8_t(header >> (i*8));
+        frameSize = write;
+        if (!pyroWaveUnpackRecords(data, frameSize, m_Format & VIDEO_FORMAT_PYROWAVE_HDR)) return DR_OK;
+    }
     const uint64_t now = LiGetMicroseconds();
     {
         std::lock_guard<std::mutex> lock(m_Mutex);
@@ -410,7 +438,7 @@ int PyroWaveVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
         else {
             m_Pending = std::move(frame);
         }
-        m_PendingSize = offset;
+        m_PendingSize = frameSize;
         m_EnqueueTime = now;
         if (!m_Threaded && !m_EventQueued) {
             SDL_Event event {};

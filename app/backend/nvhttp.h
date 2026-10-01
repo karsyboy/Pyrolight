@@ -141,6 +141,8 @@ public:
                            int timeoutMs,
                            NvLogLevel logLevel = NvLogLevel::NVLL_VERBOSE);
 
+    qint64 probePyroWaveDownloadKbps();
+
     void setServerCert(QSslCertificate serverCert);
     void setAddress(NvAddress address);
     void setHttpsPort(uint16_t port);
@@ -193,7 +195,7 @@ private:
                    QString command,
                    QString arguments,
                    int timeoutMs,
-                   NvLogLevel logLevel);
+                   NvLogLevel logLevel, qint64* probeBytes = nullptr);
 
     NvAddress m_Address;
     QNetworkAccessManager* m_Nam;

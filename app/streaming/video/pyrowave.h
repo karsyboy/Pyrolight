@@ -72,6 +72,7 @@ private:
     pyrowave_device_create_queue_info m_Queue = {};
     float m_Priority = 1.0f;
     int m_Width = 0, m_Height = 0, m_Format = 0;
+    PYROWAVE_DIALECT m_Dialect = PYROWAVE_DIALECT_NONE;
     bool m_FragmentPath = false;
     SDL_Window* m_Window = nullptr;
     std::mutex m_Mutex;

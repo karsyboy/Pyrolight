@@ -2,9 +2,11 @@
 
 PyroWave is an optional, explicitly selected video codec in Moonlight Qt
 PyroWave. Automatic selection continues to use Moonlight's standard codecs.
-The client requires both the advertised PyroWave capability bits and the
-matching private SDP version marker, so an unrelated or incompatible host is
-rejected.
+The client requires advertised PyroWave profile bits and an explicit supported
+transport contract. Native version 1 is preferred; verified Nonary/Vibepollo
+record framing is selected only through setup negotiation. Unknown bitstream
+families or contradictory dialect advertisements are rejected with a launch
+error. See [networking and compatibility](pyrowave-networking.md).
 
 ## Dependency and build contract
 
@@ -71,8 +73,8 @@ The renderer advertises direct submit because its callback only copies into the
 bounded latest-frame mailbox. This bypasses Moonlight's otherwise redundant
 15-frame decode-unit queue and avoids bursty handoff from a second decoder
 thread. Encoded inputs are capped at 3 MiB and reusable host buffers avoid
-steady-state per-frame allocation. Whole-frame FEC remains in use; incomplete
-frames are dropped, and the next intra frame resumes decoding without an IDR
+steady-state per-frame allocation. Native whole-frame FEC remains in use; incomplete
+native frames are dropped, and the next intra frame resumes decoding without an IDR
 request. The client-frame-queue statistic is counted here, before decode, when
 a newly reassembled complete encoded frame replaces the pending mailbox frame.
 

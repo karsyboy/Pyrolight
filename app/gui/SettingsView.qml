@@ -5,6 +5,8 @@ import QtQuick.Window 2.2
 
 import StreamingPreferences 1.0
 import ComputerManager 1.0
+import NetworkBuffers 1.0
+import PyroWaveCalibrator 1.0
 import SdlGamepadKeyNavigation 1.0
 import SystemProperties 1.0
 
@@ -99,9 +101,13 @@ Flickable {
         }
     }
 
+    NetworkBuffers { id: networkBuffers; packetSize: StreamingPreferences.packetSize }
+    PyroWaveCalibrator { id: networkCalibration }
+
     StackView.onActivated: {
         // This enables Tab and BackTab based navigation rather than arrow keys.
         // It is required to shift focus between controls on the settings page.
+        networkBuffers.refresh()
         SdlGamepadKeyNavigation.setUiNavMode(true)
 
         // Highlight the first item if a gamepad is connected
@@ -1878,6 +1884,63 @@ Flickable {
                                 StreamingPreferences.bitrateKbps = defaultBitrate
                                 slider.value = defaultBitrate
                             }
+                        }
+                    }
+                }
+
+                Column {
+                    width: parent.width
+                    spacing: 8
+                    visible: StreamingPreferences.videoCodecConfig === StreamingPreferences.VCC_FORCE_PYROWAVE
+                    onVisibleChanged: if (visible) networkBuffers.refresh()
+                    Label {
+                        width: parent.width
+                        visible: text.length > 0
+                        text: networkBuffers.problemText
+                        color: networkBuffers.needsFix ? "orange" : palette.text
+                        wrapMode: Text.Wrap
+                    }
+                    Label {
+                        width: parent.width
+                        visible: networkBuffers.needsFix
+                        text: networkBuffers.fixDescription + "\n" + networkBuffers.manualHint
+                        wrapMode: Text.Wrap
+                    }
+                    Row {
+                        spacing: 8
+                        visible: networkBuffers.needsFix
+                        Button { text: qsTr("Fix it"); enabled: networkBuffers.canApply && !networkBuffers.busy; onClicked: networkBuffers.apply() }
+                        Button { text: qsTr("Copy command"); onClicked: networkBuffers.copyCommand() }
+                        Button { text: qsTr("Recheck"); enabled: !networkBuffers.busy; onClicked: networkBuffers.refresh() }
+                    }
+                    Label { width: parent.width; text: networkBuffers.message; visible: text.length > 0; wrapMode: Text.Wrap }
+                    AutoResizingComboBox {
+                        id: calibrationHost
+                        width: parent.width
+                        textRole: "name"
+                        model: []
+                        onVisibleChanged: if (visible) model = networkCalibration.hosts(ComputerManager)
+                        Component.onCompleted: model = networkCalibration.hosts(ComputerManager)
+                        onPressedChanged: if (pressed) model = networkCalibration.hosts(ComputerManager)
+                        onCurrentIndexChanged: networkBuffers.setHost(currentIndex >= 0 && model[currentIndex] ? model[currentIndex].address : "")
+                        onModelChanged: networkBuffers.setHost(currentIndex >= 0 && model[currentIndex] ? model[currentIndex].address : "")
+                    }
+                    Button {
+                        text: networkCalibration.running ? qsTr("Stop calibration") : qsTr("Calibrate network bandwidth")
+                        onClicked: {
+                            if (networkCalibration.running) networkCalibration.cancel()
+                            else if (calibrationHost.currentIndex >= 0) networkCalibration.start(ComputerManager, calibrationHost.model[calibrationHost.currentIndex].uuid)
+                        }
+                    }
+                    Label { width: parent.width; text: networkCalibration.message; wrapMode: Text.Wrap }
+                    Button {
+                        text: qsTr("Use recommended ceiling")
+                        enabled: networkCalibration.ceilingKbps > 0 && !networkCalibration.running
+                        onClicked: {
+                            StreamingPreferences.autoAdjustBitrate = false
+                            StreamingPreferences.unlockBitrate = true
+                            StreamingPreferences.bitrateKbps = networkCalibration.ceilingKbps
+                            slider.value = networkCalibration.ceilingKbps
                         }
                     }
                 }

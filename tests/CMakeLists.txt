@@ -38,3 +38,31 @@ foreach(frame_test IN ITEMS pyrowave-frame pyrowave-frame-winmacros)
     endif()
     add_test(NAME ${frame_test} COMMAND ${frame_test})
 endforeach()
+
+add_executable(pyrowave-records pyrowave_records.cpp ../app/streaming/video/pyrowaveframing.cpp)
+target_compile_features(pyrowave-records PRIVATE cxx_std_17)
+add_test(NAME pyrowave-records COMMAND pyrowave-records)
+add_executable(pyrowave-bandwidth pyrowave_bandwidth.cpp)
+target_compile_features(pyrowave-bandwidth PRIVATE cxx_std_17)
+target_compile_options(pyrowave-bandwidth PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG> $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG>)
+add_test(NAME pyrowave-bandwidth COMMAND pyrowave-bandwidth)
+
+# Optional runtime HTTPS fixture harness uses the production downloader.
+find_package(Qt5 COMPONENTS Core Network Gui QUIET)
+find_package(OpenSSL QUIET)
+find_library(MOONLIGHT_PROTOCOL_LIBRARY NAMES moonlight-common-c)
+if(Qt5_FOUND AND OpenSSL_FOUND AND MOONLIGHT_PROTOCOL_LIBRARY)
+    add_executable(pyrowave-https pyrowave_https.cpp ../app/backend/nvhttp.cpp
+        ../app/backend/identitymanager.cpp ../app/backend/nvaddress.cpp ../app/backend/nvapp.cpp)
+    set_target_properties(pyrowave-https PROPERTIES AUTOMOC ON)
+    target_compile_features(pyrowave-https PRIVATE cxx_std_17)
+    target_include_directories(pyrowave-https PRIVATE ../app ../moonlight-common-c/moonlight-common-c/src)
+    target_link_libraries(pyrowave-https PRIVATE Qt5::Core Qt5::Network Qt5::Gui OpenSSL::SSL OpenSSL::Crypto
+        PkgConfig::SDL2 ${MOONLIGHT_PROTOCOL_LIBRARY})
+endif()
+
+add_executable(pyrowave-golden pyrowave_golden.cpp ../app/streaming/video/pyrowaveframing.cpp)
+target_compile_features(pyrowave-golden PRIVATE cxx_std_17)
+target_include_directories(pyrowave-golden PRIVATE ../app)
+target_compile_options(pyrowave-golden PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG> $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG>)
+add_test(NAME pyrowave-golden COMMAND pyrowave-golden ${CMAKE_CURRENT_SOURCE_DIR}/fixtures)

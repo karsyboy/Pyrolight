@@ -13,6 +13,7 @@
 
 #ifdef HAVE_PYROWAVE
 #include "video/pyrowave.h"
+#include "backend/networkbuffers.h"
 #include <PyroWave.h>
 #endif
 
@@ -81,6 +82,14 @@ void Session::clStageStarting(int stage)
 
 void Session::clStageFailed(int stage, int errorCode)
 {
+    const char* compatibilityError = stage == STAGE_RTSP_HANDSHAKE ? LiGetPyroWaveCompatibilityError() : nullptr;
+    if (compatibilityError) {
+        // StreamSegue stores the last error signal; keep the actionable reason.
+        emit s_ActiveSession->stageFailed(QString::fromLocal8Bit(LiGetStageName(stage)), errorCode, QString());
+        emit s_ActiveSession->displayLaunchError(QString::fromUtf8(compatibilityError));
+        return;
+    }
+
     // Perform the port test now, while we're on the async connection thread and not blocking the UI.
     unsigned int portFlags = LiGetPortFlagsFromStage(stage);
     s_ActiveSession->m_PortTestResults = LiTestClientConnectivity(CONN_TEST_SERVER, 443, portFlags);
@@ -1004,7 +1013,7 @@ bool Session::validateLaunch(SDL_Window* testWindow)
 #else
         const int modes = m_Computer->serverCodecModeSupport;
         const int chromaMode = m_Preferences->enableYUV444 ? SCM_PYROWAVE_444 : SCM_PYROWAVE;
-        if (!(modes & chromaMode) || (m_Preferences->enableHdr && !(modes & SCM_PYROWAVE_HDR))) {
+        if (!(modes & chromaMode) || (m_Preferences->enableHdr && !(modes & (SCM_PYROWAVE_HDR | SCM_PYROWAVE_RECORD_HDR444)))) {
             emit displayLaunchError(tr("The host does not support the selected PyroWave color mode. Enable PyroWave on Sunshine or select another codec."));
             return false;
         }
@@ -1751,6 +1760,17 @@ bool Session::startConnectionAsync()
                                                                          m_Preferences->videoCodecConfig,
                                                                          m_Preferences->enableHdr);
     }
+
+#ifdef HAVE_PYROWAVE
+    if (m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_MASK_PYROWAVE) {
+        const QString bufferWarning = NetworkBuffers::launchWarning(m_StreamConfig.packetSize,
+            QHostAddress(m_Computer->activeAddress.address()));
+        if (!bufferWarning.isEmpty()) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "%s", qPrintable(bufferWarning));
+            emitLaunchWarning(bufferWarning);
+        }
+    }
+#endif
 
     int err = LiStartConnection(&hostInfo, &m_StreamConfig, &k_ConnCallbacks,
                                 &m_VideoCallbacks, &m_AudioCallbacks,

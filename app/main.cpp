@@ -50,6 +50,8 @@
 #include "gui/appmodel.h"
 #include "backend/autoupdatechecker.h"
 #include "backend/computermanager.h"
+#include "backend/networkbuffers.h"
+#include "backend/pyrowavecalibrator.h"
 #include "backend/systemproperties.h"
 #include "streaming/session.h"
 #include "settings/streamingpreferences.h"
@@ -932,6 +934,8 @@ int main(int argc, char *argv[])
     qputenv("SDL_VIDEO_X11_WMCLASS", "com.moonlight_stream.Moonlight");
 
     // Register our C++ types for QML
+    qmlRegisterType<NetworkBuffers>("NetworkBuffers", 1, 0, "NetworkBuffers");
+    qmlRegisterType<PyroWaveCalibrator>("PyroWaveCalibrator", 1, 0, "PyroWaveCalibrator");
     qmlRegisterType<ComputerModel>("ComputerModel", 1, 0, "ComputerModel");
     qmlRegisterType<AppModel>("AppModel", 1, 0, "AppModel");
     qmlRegisterUncreatableType<Session>("Session", 1, 0, "Session", "Session cannot be created from QML");

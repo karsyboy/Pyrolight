@@ -617,3 +617,13 @@ pyrowave-smoke-test {
     SOURCES -= main.cpp
     SOURCES += tests/pyrowave_smoke.cpp
 }
+
+SOURCES += backend/networkbuffers.cpp backend/pyrowavecalibrator.cpp
+HEADERS += backend/networkbuffers.h backend/pyrowavecalibrator.h backend/pyrowavebandwidth.h
+
+win32: LIBS += iphlpapi.lib advapi32.lib shell32.lib
+
+enable-pyrowave {
+    SOURCES += streaming/video/pyrowaveframing.cpp
+    HEADERS += streaming/video/pyrowaveframing.h
+}

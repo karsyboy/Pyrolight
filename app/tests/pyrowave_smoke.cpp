@@ -4,9 +4,9 @@
 #include <SDL_vulkan.h>
 #include <cstdio>
 #include <cstdlib>
-#include <atomic>
+#include <QAtomicInt>
 #include <fstream>
-std::atomic<int> g_AsyncLoggingEnabled {0};
+QAtomicInt g_AsyncLoggingEnabled {0};
 #define REQUIRE(x) do { if (!(x)) { fprintf(stderr, "Failed: %s at %d\n", #x, __LINE__); return false; } } while (0)
 class PyroWaveDecoderSmokeTest {
 public:

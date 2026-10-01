@@ -1,4 +1,7 @@
 #include "nvcomputer.h"
+#include "pyrowavebandwidth.h"
+#include <QThread>
+#include <QElapsedTimer>
 #include <Limelight.h>
 
 #include <QDebug>
@@ -194,6 +197,20 @@ NvHTTP::getServerInfo(NvLogLevel logLevel, bool fastFail)
     }
 
     return serverInfo;
+}
+
+qint64 NvHTTP::probePyroWaveDownloadKbps()
+{
+    if (m_ServerCert.isNull() || httpsPort() == 0)
+        throw QtNetworkReplyException(QNetworkReply::AuthenticationRequiredError, "A pinned, paired HTTPS host is required.");
+    QElapsedTimer timer; timer.start();
+    qint64 bytes = 0;
+    QNetworkReply* reply = openConnection(m_BaseUrlHttps, "pyrowave-bandwidth-probe", nullptr, 10000, NVLL_ERROR, &bytes);
+    const auto elapsed = timer.nsecsElapsed();
+    delete reply;
+    const auto kbps = PyroWaveBandwidth::throughputKbps(bytes, elapsed);
+    if (kbps <= 0) throw QtNetworkReplyException(QNetworkReply::UnknownContentError, "Truncated or invalid 32 MiB PyroWave bandwidth probe.");
+    return kbps;
 }
 
 void
@@ -483,7 +500,7 @@ NvHTTP::openConnection(QUrl baseUrl,
                        QString command,
                        QString arguments,
                        int timeoutMs,
-                       NvLogLevel logLevel)
+                       NvLogLevel logLevel, qint64* probeBytes)
 {
     // Port must be set
     Q_ASSERT(baseUrl.port(0) != 0);
@@ -498,6 +515,10 @@ NvHTTP::openConnection(QUrl baseUrl,
                  ((arguments != nullptr) ? ("&" + arguments) : ""));
 
     QNetworkRequest request(url);
+    if (probeBytes) {
+        request.setRawHeader("Accept-Encoding", "identity");
+        request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
+    }
 
     // Add our client certificate
     request.setSslConfiguration(IdentityManager::get()->getSslConfig());
@@ -516,6 +537,19 @@ NvHTTP::openConnection(QUrl baseUrl,
 
     auto sslErrorsConnection = connect(m_Nam, &QNetworkAccessManager::sslErrors, this, &NvHTTP::handleSslErrors);
     QNetworkReply* reply = m_Nam->get(request);
+    if (probeBytes) {
+        *probeBytes = 0;
+        reply->setReadBufferSize(64 * 1024);
+        connect(reply, &QNetworkReply::encrypted, reply, [this, reply] {
+            if (reply->sslConfiguration().peerCertificate() != m_ServerCert) reply->abort();
+        });
+        connect(reply, &QIODevice::readyRead, reply, [reply, probeBytes] {
+            while (reply->bytesAvailable() > 0) {
+                *probeBytes += reply->read(64 * 1024).size();
+                if (*probeBytes > PyroWaveBandwidth::ProbeBytes) { reply->abort(); break; }
+            }
+        });
+    }
 
     // Run the request with a timeout if requested
     QEventLoop loop;
@@ -526,6 +560,14 @@ NvHTTP::openConnection(QUrl baseUrl,
     }
     if (logLevel >= NvLogLevel::NVLL_VERBOSE) {
         qInfo() << "Executing request:" << url.toString();
+    }
+    QTimer cancellation;
+    if (probeBytes) {
+        cancellation.setInterval(100);
+        connect(&cancellation, &QTimer::timeout, &loop, [&loop] {
+            if (QThread::currentThread()->isInterruptionRequested()) loop.quit();
+        });
+        cancellation.start();
     }
     loop.exec(QEventLoop::ExcludeUserInputEvents);
 
@@ -544,6 +586,28 @@ NvHTTP::openConnection(QUrl baseUrl,
 #endif
     disconnect(sslErrorsConnection);
 
+    if (probeBytes) {
+        *probeBytes += reply->readAll().size();
+        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (reply->sslConfiguration().peerCertificate() == m_ServerCert && (status == 409 || status == 429 || status == 404)) {
+            const QString reason = status == 409 ? "End the host stream before bandwidth calibration." :
+                status == 429 ? "Another bandwidth calibration is already running on this host." :
+                "This host does not support the PyroWave bandwidth probe.";
+            delete reply;
+            throw QtNetworkReplyException(QNetworkReply::UnknownContentError, reason);
+        }
+        const bool valid = status == 200 &&
+            reply->sslConfiguration().peerCertificate() == m_ServerCert &&
+            reply->rawHeader("Content-Encoding").isEmpty();
+        if (*probeBytes > PyroWaveBandwidth::ProbeBytes) {
+            delete reply;
+            throw QtNetworkReplyException(QNetworkReply::UnknownContentError, "PyroWave probe exceeds the 32 MiB limit");
+        }
+        if (!valid && (reply->error() == QNetworkReply::NoError || (status != 0 && status != 200))) {
+            delete reply;
+            throw QtNetworkReplyException(QNetworkReply::UnknownContentError, "Untrusted or invalid PyroWave probe response");
+        }
+    }
     // Handle error
     if (reply->error() != QNetworkReply::NoError)
     {
