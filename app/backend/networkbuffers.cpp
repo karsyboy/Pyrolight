@@ -15,9 +15,11 @@
 
 #ifdef Q_OS_WIN
 #include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
+// The SDK exposes MIB_IF_ROW2/GetIfEntry2 only when WS2IPDEF is loaded
+// before iphlpapi.h includes netioapi.h.
 #include <iphlpapi.h>
-#include <netioapi.h>
 #include <shellapi.h>
 
 #include <string>
