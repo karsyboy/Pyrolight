@@ -43,8 +43,8 @@ private slots:
         QCOMPARE(m_Preferences->activeProfileId(), QStringLiteral("default"));
         QCOMPARE(m_Preferences->activeProfileName(), QStringLiteral("Default"));
         QCOMPARE(m_Preferences->profileIds(), QStringList{QStringLiteral("default")});
-        QCOMPARE(m_Preferences->width, 1280);
-        QCOMPARE(m_Preferences->height, 720);
+        QCOMPARE(m_Preferences->width, 1920);
+        QCOMPARE(m_Preferences->height, 1080);
         QCOMPARE(m_Preferences->fps, 60);
 
         QSettings settings;
@@ -146,7 +146,7 @@ private slots:
         m_Preferences->save();
 
         QVERIFY(m_Preferences->activateProfile(QStringLiteral("default")));
-        QCOMPARE(m_Preferences->width, 1280);
+        QCOMPARE(m_Preferences->width, 1920);
         QVERIFY(m_Preferences->activateProfile(desktopId));
         QCOMPARE(m_Preferences->width, 3840);
         QCOMPARE(m_Preferences->height, 2160);
@@ -212,7 +212,7 @@ private slots:
         m_Preferences->reload();
         QCOMPARE(m_Preferences->activeProfileId(), QStringLiteral("default"));
         QVERIFY(m_Preferences->profileIds().contains(QStringLiteral("default")));
-        QCOMPARE(m_Preferences->width, 1280);
+        QCOMPARE(m_Preferences->width, 1920);
     }
 
 private:

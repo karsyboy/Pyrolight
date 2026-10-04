@@ -588,7 +588,7 @@ isEmpty(CI_VERSION) {
 }
 DEFINES += VERSION_STR=\\\"$$VERSION\\\"
 
-# Explicit opt-in, reproducible standalone dependency (see docs/pyrowave.md).
+# Explicit opt-in, reproducible standalone dependency (see docs/PYROWAVE.md).
 enable-pyrowave {
     !libplacebo: error("PyroWave requires the libplacebo Vulkan renderer")
 

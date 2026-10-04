@@ -1014,7 +1014,7 @@ bool Session::validateLaunch(SDL_Window* testWindow)
         const int modes = m_Computer->serverCodecModeSupport;
         const int chromaMode = m_Preferences->enableYUV444 ? SCM_PYROWAVE_444 : SCM_PYROWAVE;
         if (!(modes & chromaMode) || (m_Preferences->enableHdr && !(modes & (SCM_PYROWAVE_HDR | SCM_PYROWAVE_RECORD_HDR444)))) {
-            emit displayLaunchError(tr("The host does not support the selected PyroWave color mode. Enable PyroWave on Sunshine or select another codec."));
+            emit displayLaunchError(tr("The host does not support the selected PyroWave color mode. Change the HDR or YUV 4:4:4 setting, check the host's PyroWave support (on Pyroshine, run 'pyroshine healthcheck'), or select another codec."));
             return false;
         }
         if (!LiPyroWaveFrameBudget(m_StreamConfig.bitrate, m_StreamConfig.fps)) {
