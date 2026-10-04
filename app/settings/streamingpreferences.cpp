@@ -128,8 +128,8 @@ void StreamingPreferences::initializeRecommendedFullScreenMode()
 
 void StreamingPreferences::loadLegacySettings(QSettings& settings)
 {
-    width = settings.value(SER_WIDTH, 1280).toInt();
-    height = settings.value(SER_HEIGHT, 720).toInt();
+    width = settings.value(SER_WIDTH, 1920).toInt();
+    height = settings.value(SER_HEIGHT, 1080).toInt();
     fps = settings.value(SER_FPS, 60).toInt();
     enableYUV444 = settings.value(SER_YUV444, false).toBool();
     enableHdr = settings.value(SER_HDR, false).toBool();
@@ -379,8 +379,8 @@ QVariantMap StreamingPreferences::profileSettings() const
 QVariantMap StreamingPreferences::defaultProfileSettings() const
 {
     QVariantMap defaults {
-        {SER_WIDTH, 1280},
-        {SER_HEIGHT, 720},
+        {SER_WIDTH, 1920},
+        {SER_HEIGHT, 1080},
         {SER_FPS, 60},
         {SER_UNLOCK_BITRATE, false},
         {SER_AUTOADJUSTBITRATE, true},
@@ -399,7 +399,7 @@ QVariantMap StreamingPreferences::defaultProfileSettings() const
         {SER_WINDOWMODE, static_cast<int>(recommendedFullScreenMode)},
         {SER_MUTEONFOCUSLOSS, false},
     };
-    defaults.insert(SER_BITRATE, getDefaultBitrate(1280, 720, 60, false, VCC_AUTO, false));
+    defaults.insert(SER_BITRATE, getDefaultBitrate(1920, 1080, 60, false, VCC_AUTO, false));
     return defaults;
 }
 
@@ -438,8 +438,8 @@ void StreamingPreferences::applyProfileSettings(const QVariantMap& values)
         return ok && result >= minimum && result <= maximum ? result : fallback;
     };
 
-    width = boundedInt(SER_WIDTH, 1, 16384, 1280);
-    height = boundedInt(SER_HEIGHT, 1, 16384, 720);
+    width = boundedInt(SER_WIDTH, 1, 16384, 1920);
+    height = boundedInt(SER_HEIGHT, 1, 16384, 1080);
     fps = boundedInt(SER_FPS, 1, 1000, 60);
     unlockBitrate = value(SER_UNLOCK_BITRATE).toBool();
     autoAdjustBitrate = value(SER_AUTOADJUSTBITRATE).toBool();

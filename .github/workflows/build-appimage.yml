@@ -72,7 +72,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: libsdl-org/SDL
-          ref: ddba673cddfa79ce798eca5ba402e0f1a2a2a243
+          ref: release-3.4.18
           path: deps/SDL
           persist-credentials: false
 
@@ -87,7 +87,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: libsdl-org/sdl2-compat
-          ref: release-2.32.70
+          ref: release-2.32.74
           path: deps/sdl2-compat
           persist-credentials: false
 
@@ -135,7 +135,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: haasn/libplacebo
-          ref: e2972fdd09adacd383656738d7d280f0cd84a761
+          ref: 92b5ac6db79f4d680eb656692f7bf51e9606f42a
           path: deps/libplacebo
           submodules: recursive
           persist-credentials: false

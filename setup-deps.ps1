@@ -13,7 +13,7 @@ $Assets = switch ($Architecture) {
     'arm64' { @('windows-ARM64.zip') }
     default { @('windows-x64.zip', 'windows-ARM64.zip') }
 }
-$Tag = "v18.1"
+$Tag = "v19"
 
 if (Test-Path $TargetDir) {
     Write-Host "Cleaning target directory..." -ForegroundColor Cyan
