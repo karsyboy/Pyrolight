@@ -146,6 +146,11 @@ platforms and checks you could not run.
 
 ## Branding
 
+Pyrolight uses Pyroshine's orange palette: `#C43E0C` for the toolbar and
+`#FFB59E` for controls and section headings on dark surfaces. Defaults live in
+`app/main.cpp`; headings follow `Material.accent`. The existing Material primary
+and accent environment overrides remain supported.
+
 Product names and release assets use Pyrolight. Upstream project paths, library
 names, translation catalogs and compatibility identities stay intact to keep
 upstream merges small and retain settings, paired hosts and installer upgrades.
