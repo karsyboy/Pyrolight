@@ -20,7 +20,7 @@ AutoUpdateChecker::AutoUpdateChecker(QObject *parent) :
             this, &AutoUpdateChecker::handleUpdateCheckRequestFinished);
 
     QString currentVersion(VERSION_STR);
-    qDebug() << "Current Moonlight Qt PyroWave version:" << currentVersion;
+    qDebug() << "Current Pyrolight version:" << currentVersion;
     parseStringToVersionQuad(currentVersion, m_CurrentVersionQuad);
 
     // Should at least have a 1.0-style version number

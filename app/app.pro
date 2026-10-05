@@ -2,10 +2,10 @@ QT += core quick network quickcontrols2 svg
 CONFIG += c++17
 
 unix:!macx {
-    TARGET = moonlight
+    TARGET = pyrolight
 } else {
     # On macOS, this is the name displayed in the global menu bar
-    TARGET = Moonlight
+    TARGET = Pyrolight
 }
 
 include(../globaldefs.pri)
@@ -205,6 +205,8 @@ SOURCES += \
     streaming/video/overlaymanager.cpp \
     backend/systemproperties.cpp \
     wm.cpp
+
+HEADERS += brandtranslator.h
 
 HEADERS += \
     SDL_compat.h \
@@ -548,9 +550,9 @@ unix:!macx: {
 }
 win32 {
     RC_ICONS = moonlight.ico
-    QMAKE_TARGET_COMPANY = Moonlight Qt PyroWave contributors
-    QMAKE_TARGET_DESCRIPTION = Moonlight Qt client with PyroWave support
-    QMAKE_TARGET_PRODUCT = Moonlight Qt PyroWave
+    QMAKE_TARGET_COMPANY = Pyrolight contributors
+    QMAKE_TARGET_DESCRIPTION = Pyrolight game-streaming client
+    QMAKE_TARGET_PRODUCT = Pyrolight
 
     CONFIG -= embed_manifest_exe
     QMAKE_LFLAGS += /MANIFEST:embed /MANIFESTINPUT:$${PWD}/Moonlight.exe.manifest

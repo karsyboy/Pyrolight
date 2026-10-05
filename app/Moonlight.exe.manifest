@@ -7,7 +7,7 @@
             </requestedPrivileges>
         </security>
     </trustInfo>
-    <description>Moonlight Qt PyroWave</description>
+    <description>Pyrolight</description>
     <asmv3:application>
         <asmv3:windowsSettings>
             <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware>

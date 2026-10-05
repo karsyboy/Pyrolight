@@ -9,8 +9,8 @@ CONFIG(release, debug|release) {
     DEFINES += NDEBUG
 }
 
-# This fork intentionally keeps Moonlight's compatibility-sensitive executable,
-# settings, and application identifiers while presenting its own project identity.
+# Keep upstream settings, application IDs, and this fork guard for compatibility
+# and straightforward upstream merges. Executables and display names are Pyrolight.
 DEFINES += MOONLIGHT_QT_PYROWAVE
 
 # Enable CFG, EHCont, and CET

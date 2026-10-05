@@ -6,19 +6,19 @@
 <?define VCREDIST_X64_UPGRADE_CODE = "36F68A90-239C-34DF-B58C-64B30153CE35" ?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal" xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
 
-  <Bundle Name="Moonlight Qt PyroWave"
+  <Bundle Name="Pyrolight"
           Version="!(bind.PackageVersion.Moonlight_x64)"
-          Manufacturer="Moonlight Qt PyroWave contributors"
+          Manufacturer="Pyrolight contributors"
           UpgradeCode="ab4cd38f-be99-42fd-b28b-308c57fa1af6"
           HelpUrl="https://github.com/moonlight-stream/moonlight-docs/wiki/Setup-Guide"
-          UpdateUrl="https://github.com/karsyboy/moonlight-qt-pyrowave/releases"
+          UpdateUrl="https://github.com/karsyboy/pyrolight/releases"
           DisableModify="yes"
           IconSourceFile="..\..\app\moonlight.ico">
 
-    <bal:Condition Message="Moonlight Qt PyroWave requires Windows 10 or later." Condition="VersionNT &gt;= v10.0" />
-    <bal:Condition Message="Moonlight Qt PyroWave requires a 64-bit version of Windows." Condition="NativeMachine &lt;&gt; 332" />
+    <bal:Condition Message="Pyrolight requires Windows 10 or later." Condition="VersionNT &gt;= v10.0" />
+    <bal:Condition Message="Pyrolight requires a 64-bit version of Windows." Condition="NativeMachine &lt;&gt; 332" />
 
-    <Variable Name="InstallFolder" Type="formatted" Value="[ProgramFiles6432Folder]Moonlight Qt PyroWave" />
+    <Variable Name="InstallFolder" Type="formatted" Value="[ProgramFiles6432Folder]Pyrolight" />
 
     <!-- Define "Add desktop shortcut" -checkbox's state by defining a variable
          which has same name as the checkbox has. Value 1 means that checkbox
@@ -39,7 +39,7 @@
       <bal:WixStandardBootstrapperApplication ShowVersion="yes"
                                               LicenseFile="license.rtf"
                                               LogoFile="..\..\app\moonlight_wix.png"
-                                              LaunchTarget="[InstallFolder]\Moonlight.exe"
+                                              LaunchTarget="[InstallFolder]\Pyrolight.exe"
                                               ThemeFile="RtfTheme.xml"
                                               Theme="rtfLicense" />
       <Payload Name="Moonlight.ico" SourceFile="..\..\app\moonlight.ico" Compressed="yes" />

@@ -1,7 +1,7 @@
 [Desktop Entry]
-Name=Moonlight Qt PyroWave
-Comment=Moonlight Qt game streaming with PyroWave support
-Exec=moonlight
+Name=Pyrolight
+Comment=Game streaming with PyroWave support
+Exec=pyrolight
 Icon=moonlight
 Terminal=false
 Type=Application

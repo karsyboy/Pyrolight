@@ -1,4 +1,4 @@
-# Contributing to Moonlight Qt PyroWave
+# Contributing to Pyrolight
 
 Bug fixes, documentation improvements, and focused features are welcome. Report
 bugs with the issue template; include the client release, OS, GPU and driver,
@@ -15,8 +15,8 @@ General Moonlight behavior should stay as close to upstream as practical; see
 Clone with submodules:
 
 ```sh
-git clone --recurse-submodules https://github.com/karsyboy/moonlight-qt-pyrowave.git
-cd moonlight-qt-pyrowave
+git clone --recurse-submodules https://github.com/karsyboy/pyrolight.git
+cd pyrolight
 ```
 
 ### PyroWave dependency
@@ -144,13 +144,37 @@ behavior, reconnects or controller hardware. For decoder, renderer, network or
 protocol changes, test against a real Pyroshine host and report the hardware,
 platforms and checks you could not run.
 
+## Branding
+
+Product names and release assets use Pyrolight. Upstream project paths, library
+names, translation catalogs and compatibility identities stay intact to keep
+upstream merges small and retain settings, paired hosts and installer upgrades.
+`app/brandtranslator.h` rebrands translated client references without rewriting
+upstream source strings. Keep upstream help links and external tool names.
+
+The logo follows Pyroshine's flame-and-orbit style with a crescent center. To
+regenerate Windows, macOS, Steam Link and Linux/Qt icons from the source PNG:
+
+```sh
+# Requires Pillow.
+python3 scripts/generate-branding.py
+qmake6 app/tests/brandtranslator_test.pro -o build/brand-test/Makefile
+make -C build/brand-test
+./build/brand-test/brandtranslator-test
+```
+
+The SVG embeds the icon PNG so Qt's stream-window renderer and installed desktop
+icons use the same artwork. Legacy `moonlight` asset filenames are intentional.
+The branding test checks the English fallback, an upstream French catalog and
+Qt SVG rendering. Check installer upgrades on Windows when changing packaging.
+
 ## Publishing a release
 
 Push an annotated tag in the form `vMAJOR.MINOR.PATCH` (optionally `.BUILD`):
 
 ```sh
 # Example only: replace with the version being released.
-git tag -a vX.Y.Z -m "Moonlight Qt PyroWave vX.Y.Z"
+git tag -a vX.Y.Z -m "Pyrolight vX.Y.Z"
 git push origin vX.Y.Z
 ```
 

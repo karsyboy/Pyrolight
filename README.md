@@ -1,11 +1,13 @@
-# Moonlight Qt PyroWave
+# Pyrolight
+
+<p align="center"><img src="assets/icon.png" alt="Pyrolight" width="160"></p>
 
 <p>
-    <a href="https://github.com/karsyboy/moonlight-qt-pyrowave/actions/workflows/release.yml">
-        <img src="https://github.com/karsyboy/moonlight-qt-pyrowave/actions/workflows/release.yml/badge.svg"></a>
+    <a href="https://github.com/karsyboy/pyrolight/actions/workflows/release.yml">
+        <img src="https://github.com/karsyboy/pyrolight/actions/workflows/release.yml/badge.svg"></a>
 </p>
 
-Moonlight Qt PyroWave is a game-streaming client based on
+Pyrolight is a game-streaming client based on
 [Moonlight Qt](https://github.com/moonlight-stream/moonlight-qt). It keeps
 Moonlight's standard codecs and features and adds an explicitly selected
 [PyroWave](https://github.com/karsyboy/pyrowave) video path for
@@ -35,18 +37,18 @@ upstream Moonlight Qt.
 ## Installation
 
 Download a release from the
-[releases page](https://github.com/karsyboy/moonlight-qt-pyrowave/releases).
+[releases page](https://github.com/karsyboy/pyrolight/releases).
 Each release includes `SHA256SUMS`.
 
 | Platform | Asset | Install |
 | --- | --- | --- |
 | Windows | `*-windows-x64-installer.exe` | Run the installer |
-| Windows (portable) | `*-windows-x64-portable.zip` | Extract and run `Moonlight.exe` |
+| Windows (portable) | `*-windows-x64-portable.zip` | Extract and run `Pyrolight.exe` |
 | Linux | `*-linux-x86_64.AppImage` | Make executable and run |
 
 ```sh
-chmod +x moonlight-qt-pyrowave-v*-linux-x86_64.AppImage
-./moonlight-qt-pyrowave-v*-linux-x86_64.AppImage
+chmod +x pyrolight-v*-linux-x86_64.AppImage
+./pyrolight-v*-linux-x86_64.AppImage
 ```
 
 This fork does not check for updates in the app; watch the releases page
@@ -55,7 +57,7 @@ not published.
 
 ## Streaming with PyroWave
 
-1. Pair with the host as usual in Moonlight.
+1. Pair with the host in Pyrolight.
 2. In **Settings**, set **Video codec** to **PyroWave**. The option appears when
    the client's PyroWave decoder probe succeeds on this GPU.
 3. Enable **HDR** or **YUV 4:4:4** only when the host and your display support
@@ -65,10 +67,10 @@ not published.
    for 4K120 in 4:2:0 SDR. Use **Calibrate network bandwidth** to measure a safe
    ceiling for a paired host.
 
-From the command line, pass the same options to the AppImage or `Moonlight.exe`:
+From the command line, pass the same options to the AppImage or `Pyrolight.exe`:
 
 ```sh
-./moonlight-qt-pyrowave-v*-linux-x86_64.AppImage stream --video-codec PyroWave --bitrate 200000 \
+./pyrolight-v*-linux-x86_64.AppImage stream --video-codec PyroWave --bitrate 200000 \
   --resolution 3840x2160 --fps 60 --hdr --yuv444 HOST Desktop
 ```
 
@@ -114,7 +116,7 @@ stream settings, and client and host logs. On Windows, client logs are in
 
 ## License and credits
 
-Moonlight Qt PyroWave is an independent community fork of
+Pyrolight is an independent community fork of
 [Moonlight Qt](https://github.com/moonlight-stream/moonlight-qt) and is not an
 official Moonlight or PyroWave project. It periodically merges upstream client
 changes. Its `moonlight-common-c` submodule points to the

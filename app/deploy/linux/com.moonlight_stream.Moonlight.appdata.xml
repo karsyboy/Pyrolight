@@ -4,30 +4,30 @@
 	<id>com.moonlight_stream.Moonlight</id>
 	<metadata_license>CC0-1.0</metadata_license>
 	<project_license>GPL-3.0+</project_license>
-	<name>Moonlight Qt PyroWave</name>
-	<summary>Moonlight Qt game-streaming client with PyroWave support</summary>
+	<name>Pyrolight</name>
+	<summary>Game-streaming client with PyroWave support</summary>
 
 	<description>
-		<p>Moonlight Qt PyroWave is an independent Moonlight Qt fork for streaming games and applications from Pyroshine or another compatible host.</p>
+		<p>Pyrolight is an independent Moonlight Qt fork for streaming games and applications from Pyroshine or another compatible host.</p>
 		<p>In addition to Moonlight's H.264, HEVC, and AV1 paths, this build includes an explicitly selectable PyroWave Vulkan codec with SDR, HDR, YUV 4:2:0, and YUV 4:4:4 support.</p>
 		<p>PyroWave requires a compatible Pyroshine host and a supported Vulkan GPU and driver.</p>
 	</description>
 
-	<url type="homepage">https://github.com/karsyboy/moonlight-qt-pyrowave</url>
-	<url type="bugtracker">https://github.com/karsyboy/moonlight-qt-pyrowave/issues</url>
+	<url type="homepage">https://github.com/karsyboy/pyrolight</url>
+	<url type="bugtracker">https://github.com/karsyboy/pyrolight/issues</url>
 	<url type="help">https://github.com/moonlight-stream/moonlight-docs/wiki/Setup-Guide</url>
-	<url type="vcs-browser">https://github.com/karsyboy/moonlight-qt-pyrowave</url>
+	<url type="vcs-browser">https://github.com/karsyboy/pyrolight</url>
 	<developer id="io.github.karsyboy">
-		<name>Moonlight Qt PyroWave contributors</name>
+		<name>Pyrolight contributors</name>
 	</developer>
 	<launchable type="desktop-id">com.moonlight_stream.Moonlight.desktop</launchable>
 	<provides>
-		<binary>moonlight</binary>
+		<binary>pyrolight</binary>
 	</provides>
 	<content_rating type="oars-1.1" />
 
 	<branding>
-		<color type="primary" scheme_preference="light">#710085</color>
-		<color type="primary" scheme_preference="dark">#55285d</color>
+		<color type="primary" scheme_preference="light">#ff9900</color>
+		<color type="primary" scheme_preference="dark">#ff6600</color>
 	</branding>
 </component>

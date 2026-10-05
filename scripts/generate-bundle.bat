@@ -71,7 +71,7 @@ if !ERRORLEVEL! NEQ 0 goto Error
 
 echo Building bundle
 rem Bundles are always x86 binaries
-set "INSTALLER_NAME=MoonlightQtPyroWaveSetup-x64-%VERSION%"
+set "INSTALLER_NAME=PyrolightSetup-x64-%VERSION%"
 cmd /c "set VERSION= && msbuild -Restore %SOURCE_ROOT%\wix\MoonlightSetup\MoonlightSetup.wixproj /p:Configuration=%BUILD_CONFIG% /p:Platform=x86 /p:OutputName=%INSTALLER_NAME% /p:MSBuildProjectExtensionsPath=%BUILD_FOLDER%\"
 if !ERRORLEVEL! NEQ 0 goto Error
 
@@ -80,7 +80,7 @@ if not exist "%INSTALLER_FOLDER%\%INSTALLER_NAME%.exe" (
     exit /b 1
 )
 
-echo Build successful for Moonlight Qt PyroWave v%VERSION% installer!
+echo Build successful for Pyrolight v%VERSION% installer!
 exit /b 0
 
 :Error

@@ -22,10 +22,10 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       CI_VERSION: ${{ inputs.release_version }}
-      RELEASE_ASSET: moonlight-qt-pyrowave-${{ inputs.release_tag }}-linux-x86_64.AppImage
+      RELEASE_ASSET: pyrolight-${{ inputs.release_tag }}-linux-x86_64.AppImage
 
     steps:
-      - name: Check out Moonlight Qt PyroWave
+      - name: Check out Pyrolight
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
@@ -209,20 +209,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          source_asset="build/installer-release/Moonlight-${CI_VERSION}-x86_64.AppImage"
+          source_asset="build/installer-release/Pyrolight-${CI_VERSION}-x86_64.AppImage"
           test -s "${source_asset}"
           chmod +x "${source_asset}"
           "${source_asset}" --appimage-extract >/dev/null
-          readelf -d squashfs-root/usr/bin/moonlight | grep -F 'libpyrowave-shared.so.0'
+          readelf -d squashfs-root/usr/bin/pyrolight | grep -F 'libpyrowave-shared.so.0'
           find squashfs-root -type f -name 'libpyrowave-shared.so*' -print -quit | grep -F 'libpyrowave-shared.so'
-          test -s squashfs-root/usr/share/licenses/moonlight-qt-pyrowave/Moonlight-Qt-PyroWave-LICENSE
-          test -s squashfs-root/usr/share/licenses/moonlight-qt-pyrowave/PyroWave-LICENSE
+          test -s squashfs-root/usr/share/licenses/pyrolight/Pyrolight-LICENSE
+          test -s squashfs-root/usr/share/licenses/pyrolight/PyroWave-LICENSE
           mv "${source_asset}" "build/installer-release/${RELEASE_ASSET}"
 
       - name: Upload Linux release artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
         with:
-          name: moonlight-qt-pyrowave-${{ inputs.release_tag }}-linux-x86_64
+          name: pyrolight-${{ inputs.release_tag }}-linux-x86_64
           path: build/installer-release/${{ env.RELEASE_ASSET }}
           compression-level: 0
           if-no-files-found: error

@@ -64,7 +64,7 @@ fi
 qmake6 $SOURCE_ROOT/moonlight-qt.pro "${QMAKE_CONFIG[@]}" || fail "Qmake failed!"
 popd
 
-echo Compiling Moonlight in $BUILD_CONFIG configuration
+echo Compiling Pyrolight in $BUILD_CONFIG configuration
 pushd $BUILD_FOLDER
 make -j$(nproc) $(echo "$BUILD_CONFIG" | tr '[:upper:]' '[:lower:]') || fail "Make failed!"
 popd
@@ -75,9 +75,9 @@ make install || fail "Make install failed!"
 popd
 
 echo Staging license notices
-LICENSE_DIR=$DEPLOY_FOLDER/usr/share/licenses/moonlight-qt-pyrowave
+LICENSE_DIR=$DEPLOY_FOLDER/usr/share/licenses/pyrolight
 mkdir -p "$LICENSE_DIR"
-cp "$SOURCE_ROOT/LICENSE" "$LICENSE_DIR/Moonlight-Qt-PyroWave-LICENSE"
+cp "$SOURCE_ROOT/LICENSE" "$LICENSE_DIR/Pyrolight-LICENSE"
 if [ -n "${PYROWAVE_PREFIX:-}" ]; then
   cp "$PYROWAVE_PREFIX/share/licenses/pyrowave/LICENSE" "$LICENSE_DIR/PyroWave-LICENSE"
 fi
@@ -105,7 +105,7 @@ if [ -n "$SYSTEM_LIBVA" ]; then
   # binaries shipped in the AppImage require, otherwise a host libva could pass the
   # probe and still fail to load Moonlight or the bundled FFmpeg.
   va_nodes() { LC_ALL=C readelf -V "$1" 2>/dev/null | grep -oE 'VA_API_[0-9]+\.[0-9]+\.[0-9]+' | sort -u; }
-  NEEDED_NODES=$(for b in $DEPLOY_FOLDER/usr/bin/moonlight \
+  NEEDED_NODES=$(for b in $DEPLOY_FOLDER/usr/bin/pyrolight \
                           /usr/local/lib*/libav*.so* /usr/local/lib*/libsw*.so* \
                           /usr/lib/x86_64-linux-gnu/libav*.so* /usr/lib/x86_64-linux-gnu/libsw*.so*; do
                    [ -f "$b" ] && va_nodes "$b"; done | sort -u)
@@ -139,7 +139,7 @@ if [ -d "$LIBVA_FALLBACK" ] && ! "$LIBVA_FALLBACK/libva-probe" 2>/dev/null; then
     export VAAPI_USE_FALLBACK_PATHS=1
 fi
 
-exec "$APPDIR/usr/bin/moonlight" "$@"
+exec "$APPDIR/usr/bin/pyrolight" "$@"
 APPRUN_EOF
 chmod +x $APP_RUN
 
@@ -151,7 +151,7 @@ pushd $INSTALLER_FOLDER
 # software decoding. The host always provides libva on systems where VA-API is
 # usable, so link against it at runtime instead (the AppRun shim above keeps a
 # bundled last-resort copy for hosts without libva).
-VERSION=$VERSION OUTPUT="Moonlight-$VERSION-$(uname -m).AppImage" $LINUXDEPLOY --appdir $DEPLOY_FOLDER \
+VERSION=$VERSION OUTPUT="Pyrolight-$VERSION-$(uname -m).AppImage" $LINUXDEPLOY --appdir $DEPLOY_FOLDER \
   --library=/usr/local/lib/libSDL3.so.0 \
   "${LINUXDEPLOY_EXTRA_ARGS[@]}" \
   --plugin qt \

@@ -1,9 +1,9 @@
 #include "streamingpreferences.h"
 #include "bitratecalculator.h"
+#include "brandtranslator.h"
 #include "utils.h"
 
 #include <QSettings>
-#include <QTranslator>
 #include <QCoreApplication>
 #include <QLocale>
 #include <QReadWriteLock>
@@ -229,7 +229,7 @@ bool StreamingPreferences::retranslate()
     }
 #endif
 
-    QTranslator* newTranslator = new QTranslator();
+    QTranslator* newTranslator = new BrandTranslator();
     QString languageSuffix = getSuffixFromLanguage(language);
 
     // Remove the old translator, even if we can't load a new one.
@@ -243,14 +243,14 @@ bool StreamingPreferences::retranslate()
 
     if (newTranslator->load(QString(":/languages/qml_") + languageSuffix)) {
         qInfo() << "Successfully loaded translation for" << languageSuffix;
-
-        translator = newTranslator;
-        QCoreApplication::installTranslator(translator);
     }
     else {
         qInfo() << "No translation available for" << languageSuffix;
-        delete newTranslator;
     }
+
+    // Install even without a catalog: English UI strings need branding too.
+    translator = newTranslator;
+    QCoreApplication::installTranslator(translator);
 
     if (m_QmlEngine != nullptr) {
 #if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)

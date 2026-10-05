@@ -1,6 +1,6 @@
-# Working in Moonlight Qt PyroWave
+# Working in Pyrolight
 
-Moonlight Qt PyroWave is a fork of the Moonlight Qt game-streaming client. It
+Pyrolight is a fork of the Moonlight Qt game-streaming client. It
 keeps upstream Moonlight's behavior and adds a PyroWave decode path, PyroWave
 network tools, streaming profiles and DualSense Edge identity, primarily for
 [Pyroshine](https://github.com/karsyboy/pyroshine) hosts. This file is a
@@ -144,6 +144,22 @@ This repository follows the same documentation standard as Pyroshine:
 
 Update the relevant document with any user-visible or contract change. Update
 this file when boundaries, commands, document locations or fork invariants change.
+
+## Branding and compatibility identity
+
+The product is **Pyrolight**, with `pyrolight` on Linux and `Pyrolight.exe` on
+Windows. Keep upstream source/project paths (`moonlight-qt.pro`, `wix/Moonlight/`),
+submodule names, protocol identifiers, the `MOONLIGHT_QT_PYROWAVE` guard, desktop
+and bundle IDs, QSettings organization/application keys and WiX upgrade/state
+keys unchanged. These are compatibility and merge boundaries, not display names.
+
+`app/brandtranslator.h` applies the client name after translation lookup, with
+an English fallback. Preserve upstream QML/tr() source keys and translation
+catalogs; the external Moonlight Internet Hosting Tool keeps its real name.
+`assets/logo-no-text.png` is the Pyrolight source mark;
+`scripts/generate-branding.py` regenerates all platform icons at their upstream
+asset paths. Those paths contain Pyrolight artwork despite their legacy names.
+See [CONTRIBUTING.md](CONTRIBUTING.md#branding) for regeneration and checks.
 
 ## Upstream synchronization
 

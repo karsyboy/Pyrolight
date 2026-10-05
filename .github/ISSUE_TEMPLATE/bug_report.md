@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report a reproducible Moonlight Qt PyroWave problem
+about: Report a reproducible Pyrolight problem
 ---
 
 Before reporting a general streaming issue, review the upstream
@@ -17,7 +17,7 @@ the problem also occurs with H.264, HEVC, or AV1 selected instead of PyroWave.
 
 ## Client
 
-- Moonlight Qt PyroWave release/tag:
+- Pyrolight release/tag:
 - Release asset used (Windows installer, Windows portable, or Linux AppImage):
 - Operating system:
 - GPU and driver:

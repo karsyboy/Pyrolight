@@ -1,5 +1,5 @@
 ---
-name: Release Moonlight Qt PyroWave
+name: Release Pyrolight
 
 on:
   push:
@@ -46,7 +46,7 @@ jobs:
       PYROWAVE_SOURCE: ${{ github.workspace }}\deps\PyroWave
 
     steps:
-      - name: Check out Moonlight Qt PyroWave
+      - name: Check out Pyrolight
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
@@ -121,8 +121,8 @@ jobs:
           RELEASE_TAG: ${{ needs.version.outputs.release_tag }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $installer = "build/installer-release/MoonlightQtPyroWaveSetup-x64-$Env:CI_VERSION.exe"
-          $portable = "build/installer-x64-release/MoonlightQtPyroWavePortable-x64-$Env:CI_VERSION.zip"
+          $installer = "build/installer-release/PyrolightSetup-x64-$Env:CI_VERSION.exe"
+          $portable = "build/installer-x64-release/PyrolightPortable-x64-$Env:CI_VERSION.zip"
           $runtime = Get-ChildItem "build/deploy-x64-release" -Filter "*pyrowave-shared*.dll"
           if (!(Test-Path $installer -PathType Leaf) -or (Get-Item $installer).Length -eq 0) {
             $candidates = Get-ChildItem build -Recurse -File -Filter "*.exe" |
@@ -143,13 +143,13 @@ jobs:
             throw "The portable archive is missing portable mode, PyroWave, or its license."
           }
           New-Item -ItemType Directory -Path release-assets | Out-Null
-          Move-Item $installer "release-assets/moonlight-qt-pyrowave-$Env:RELEASE_TAG-windows-x64-installer.exe"
-          Move-Item $portable "release-assets/moonlight-qt-pyrowave-$Env:RELEASE_TAG-windows-x64-portable.zip"
+          Move-Item $installer "release-assets/pyrolight-$Env:RELEASE_TAG-windows-x64-installer.exe"
+          Move-Item $portable "release-assets/pyrolight-$Env:RELEASE_TAG-windows-x64-portable.zip"
 
       - name: Upload Windows release artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
         with:
-          name: moonlight-qt-pyrowave-${{ needs.version.outputs.release_tag }}-windows-x64
+          name: pyrolight-${{ needs.version.outputs.release_tag }}-windows-x64
           path: release-assets/*
           if-no-files-found: error
 
@@ -174,7 +174,7 @@ jobs:
       - name: Download release artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.0
         with:
-          pattern: moonlight-qt-pyrowave-${{ needs.version.outputs.release_tag }}-*
+          pattern: pyrolight-${{ needs.version.outputs.release_tag }}-*
           path: release-assets
           merge-multiple: true
 
@@ -183,9 +183,9 @@ jobs:
         run: |
           set -euo pipefail
           expected=(
-            "moonlight-qt-pyrowave-${{ needs.version.outputs.release_tag }}-windows-x64-installer.exe"
-            "moonlight-qt-pyrowave-${{ needs.version.outputs.release_tag }}-windows-x64-portable.zip"
-            "moonlight-qt-pyrowave-${{ needs.version.outputs.release_tag }}-linux-x86_64.AppImage"
+            "pyrolight-${{ needs.version.outputs.release_tag }}-windows-x64-installer.exe"
+            "pyrolight-${{ needs.version.outputs.release_tag }}-windows-x64-portable.zip"
+            "pyrolight-${{ needs.version.outputs.release_tag }}-linux-x86_64.AppImage"
           )
           for asset in "${expected[@]}"; do
             test -s "release-assets/${asset}" || {
@@ -210,6 +210,6 @@ jobs:
             gh release create "${RELEASE_TAG}" release-assets/* \
               --verify-tag \
               --target "${GITHUB_SHA}" \
-              --title "Moonlight Qt PyroWave ${RELEASE_TAG}" \
+              --title "Pyrolight ${RELEASE_TAG}" \
               --generate-notes
           fi
