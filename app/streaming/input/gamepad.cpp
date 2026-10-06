@@ -742,7 +742,10 @@ void SdlInputHandler::handleControllerDeviceEvent(SDL_ControllerDeviceEvent* eve
             break;
         }
 
-        const bool isEdge = GamepadIdentity::isDualSenseEdge(vendorId, productId);
+        const uint16_t subtype = GamepadIdentity::subtype(vendorId, productId);
+        type = GamepadIdentity::subtypeFamily(subtype, type);
+        capabilities |= subtype;
+        const bool isEdge = subtype == LI_CCAP_DUALSENSE_EDGE;
         if (isEdge) {
             // Keep the PS family even with SDL builds that don't yet identify Edge.
             type = LI_CTYPE_PS;

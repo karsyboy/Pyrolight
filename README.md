@@ -17,7 +17,7 @@ Moonlight's standard codecs and features and adds an explicitly selected
 - H.264, HEVC, and AV1 with any Moonlight-compatible host.
 - PyroWave network calibration and receive-buffer diagnostics.
 - Named streaming profiles for switching between sets of stream settings.
-- Native DualSense Edge identity, including its rear paddles and Fn buttons, on Pyroshine hosts.
+- Native model metadata for Xbox Elite, classic Steam Controller, Steam Deck and DualSense Edge on matching Pyroshine hosts; see [controller support and limits](docs/NATIVE_CONTROLLERS.md).
 
 PyroWave is an intra-only wavelet codec with very low GPU encode and decode
 latency, designed for high-bandwidth local networks. It is never selected
@@ -111,6 +111,7 @@ stream settings, and client and host logs. On Windows, client logs are in
 
 - [PyroWave network tuning and calibration](docs/PYROWAVE_NETWORKING.md)
 - [PyroWave integration architecture](docs/PYROWAVE.md)
+- [Native controller metadata and validation](docs/NATIVE_CONTROLLERS.md)
 - [Building, testing, and releasing](CONTRIBUTING.md)
 - [Upstream Moonlight documentation](https://github.com/moonlight-stream/moonlight-docs/wiki)
 

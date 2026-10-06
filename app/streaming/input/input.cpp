@@ -166,6 +166,13 @@ SdlInputHandler::SdlInputHandler(StreamingPreferences& prefs, int streamWidth, i
     SDL_SetHint(SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES, streamIgnoreDevices.toUtf8());
     SDL_SetHint(SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT, streamIgnoreDevicesExcept.toUtf8());
 
+#ifdef SDL_HINT_JOYSTICK_HIDAPI_STEAM
+    // SDL defaults classic Steam HIDAPI off. Use native normalization while
+    // streaming; SDL environment overrides retain their higher priority.
+    m_OldSteamHidapi = SDL_GetHint(SDL_HINT_JOYSTICK_HIDAPI_STEAM);
+    SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_STEAM, "1");
+#endif
+
     // We must initialize joystick explicitly before gamecontroller in order
     // to ensure we receive gamecontroller attach events for gamepads where
     // SDL doesn't have a built-in mapping. By starting joystick first, we
@@ -251,6 +258,11 @@ SdlInputHandler::~SdlInputHandler()
 
     // Return background event handling to off
     SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "0");
+
+#ifdef SDL_HINT_JOYSTICK_HIDAPI_STEAM
+    SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_STEAM,
+                m_OldSteamHidapi.isNull() ? nullptr : m_OldSteamHidapi.toUtf8().constData());
+#endif
 
     // Restore the ignored devices
     SDL_SetHint(SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES, m_OldIgnoreDevices.toUtf8());

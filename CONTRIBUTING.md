@@ -109,7 +109,7 @@ cmake --build build/tests
 ctest --test-dir build/tests --output-on-failure
 ```
 
-They cover DualSense Edge identity and capability compatibility, PyroWave color
+They cover native controller identities, protocol capabilities and normalized paddle press/release, PyroWave color
 mapping, frame validation, record parsing and recovery, bandwidth math, and
 golden bitstreams from both the client and host forks. When Qt5, OpenSSL and a
 built `moonlight-common-c` library are available, the project also builds
