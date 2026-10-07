@@ -39,14 +39,16 @@ export LDFLAGS=-flto=auto
 
 echo Configuring the project
 pushd $BUILD_FOLDER
-# Building with Wayland support will cause linuxdeploy to include libwayland-client.so in the AppImage.
-# Since we always use the host implementation of EGL, this can cause libEGL_mesa.so to fail to load due
-# to missing symbols from the host's version of libwayland-client.so that aren't present in the older
-# version of libwayland-client.so from our AppImage build environment. When this happens, EGL fails to
-# work even in X11. To avoid this, we will disable Wayland support for the AppImage.
+# Both native Wayland and X11 are built. The libwayland libraries are part of the host graphics
+# stack and are never bundled in usr/lib (see the libwayland staging and linuxdeploy exclusions below):
+# the host's libEGL_mesa.so and Vulkan WSI drivers need the host's libwayland-client.so, and an older
+# bundled copy would shadow it and break EGL even on X11.
+#
+# libva-wayland is loaded at runtime rather than linked so that the libva probe below only depends
+# on libva and libva-x11 (libva-wayland is a separate, often uninstalled package on Debian/Ubuntu).
 #
 # We disable DRM support because linuxdeploy doesn't bundle the appropriate libraries for Qt EGLFS.
-QMAKE_CONFIG=(CONFIG+=disable-wayland CONFIG+=disable-libdrm PREFIX=$DEPLOY_FOLDER/usr DEFINES+=APP_IMAGE)
+QMAKE_CONFIG=(CONFIG+=disable-libdrm CONFIG+=dlopen-libva-wayland PREFIX=$DEPLOY_FOLDER/usr DEFINES+=APP_IMAGE)
 LINUXDEPLOY_EXTRA_ARGS=()
 if [ -n "${PYROWAVE_PREFIX:-}" ]; then
   PYROWAVE_PREFIX=$(readlink -f "$PYROWAVE_PREFIX")
@@ -114,6 +116,32 @@ if [ -n "$SYSTEM_LIBVA" ]; then
     fail "libva-probe is missing version node(s): $(comm -13 <(echo "$PROBE_NODES") <(echo "$NEEDED_NODES")) - update app/deploy/linux/libva-probe.c!"
 fi
 
+# libwayland-client is never bundled in usr/lib, but Moonlight links it directly, so a host without
+# it (an X11-only system) could not start at all. Stage the build-environment copy in
+# opt/wayland-fallback with a probe, like libva above: AppRun exposes it only when the host copy is
+# missing or too old for Moonlight. In that case nothing on the host can depend on a newer one.
+# libwayland-cursor and libwayland-egl are only needed once Qt or SDL use Wayland; if they are missing,
+# Qt's Wayland plugin fails to load and Qt falls back to xcb.
+WAYLAND_FALLBACK_DIR=$DEPLOY_FOLDER/opt/wayland-fallback
+SYSTEM_WAYLAND_CLIENT=$(ldconfig -p 2>/dev/null | awk '/libwayland-client\.so\.0/{print $NF; exit}')
+[ -n "$SYSTEM_WAYLAND_CLIENT" ] || fail "Unable to find libwayland-client.so.0!"
+mkdir -p $WAYLAND_FALLBACK_DIR
+cp -L "$SYSTEM_WAYLAND_CLIENT" $WAYLAND_FALLBACK_DIR/libwayland-client.so.0 || fail "Unable to stage libwayland-client fallback copy!"
+
+echo Compiling wayland-probe
+cc -O2 -Wl,-z,now -Wl,--no-as-needed -o $WAYLAND_FALLBACK_DIR/wayland-probe \
+  $SOURCE_ROOT/app/deploy/linux/wayland-probe.c -lwayland-client || fail "Unable to compile wayland-probe!"
+
+# Keep the probe honest: it must reference every libwayland-client symbol that Moonlight and the
+# staged libva-wayland import (libwayland has no version nodes, so compare symbol names).
+wl_imports() { nm -D --undefined-only "$1" 2>/dev/null | awk '$2 ~ /^wl_/ {print $2}' | sort -u; }
+NEEDED_WL=$(for b in $DEPLOY_FOLDER/usr/bin/pyrolight $LIBVA_FALLBACK_DIR/libva-wayland.so.2; do
+              [ -f "$b" ] && wl_imports "$b"; done | sort -u)
+PROBE_WL=$(wl_imports $WAYLAND_FALLBACK_DIR/wayland-probe)
+[ -n "$NEEDED_WL" ] || fail "Moonlight does not import libwayland-client - was Wayland support compiled?"
+[ -z "$(comm -13 <(echo "$PROBE_WL") <(echo "$NEEDED_WL"))" ] || \
+  fail "wayland-probe is missing symbol(s): $(comm -13 <(echo "$PROBE_WL") <(echo "$NEEDED_WL")) - update app/deploy/linux/wayland-probe.c!"
+
 APP_RUN=$BUILD_ROOT/AppRun-libva
 cat > $APP_RUN <<'APPRUN_EOF'
 #!/bin/bash
@@ -132,7 +160,15 @@ cat > $APP_RUN <<'APPRUN_EOF'
 # or one too old to link), we make the staged build-environment copy visible
 # via LD_LIBRARY_PATH, matching the pre-existing bundled behavior.
 APPDIR="${APPDIR:-$(dirname "$(readlink -f "$0")")}"
+WAYLAND_FALLBACK="$APPDIR/opt/wayland-fallback"
 LIBVA_FALLBACK="$APPDIR/opt/libva-fallback"
+
+# libwayland-client follows the same rule and is checked first, because
+# libva-wayland (and thus libva-probe) needs it. The staged copy is used only
+# when the host has no usable libwayland-client (for example X11-only systems).
+if [ -d "$WAYLAND_FALLBACK" ] && ! "$WAYLAND_FALLBACK/wayland-probe" 2>/dev/null; then
+    export LD_LIBRARY_PATH="$WAYLAND_FALLBACK${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
 
 if [ -d "$LIBVA_FALLBACK" ] && ! "$LIBVA_FALLBACK/libva-probe" 2>/dev/null; then
     export LD_LIBRARY_PATH="$LIBVA_FALLBACK${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
@@ -143,6 +179,22 @@ exec "$APPDIR/usr/bin/pyrolight" "$@"
 APPRUN_EOF
 chmod +x $APP_RUN
 
+# Qt's native Wayland platform plugins; xcb (deployed by linuxdeploy-plugin-qt) remains the fallback.
+# They are staged here and their dependencies resolved by linuxdeploy itself, because the pinned
+# linuxdeploy-plugin-qt neither deploys the shell/decoration plugins Qt 6.2 needs nor honors
+# --exclude-library (it would bundle libwayland-cursor and libwayland-egl). "wayland" selects
+# libqwayland-generic, which uses the wayland-egl client buffer integration for Qt Quick; xdg-shell
+# is the shell every desktop compositor supports and bradient draws decorations where the
+# compositor does not (GNOME).
+QT_PLUGINS_DIR=$(qmake6 -query QT_INSTALL_PLUGINS)
+for plugin in platforms/libqwayland-generic.so platforms/libqwayland-egl.so \
+              wayland-graphics-integration-client/libqt-plugin-wayland-egl.so \
+              wayland-shell-integration/libxdg-shell.so wayland-decoration-client/libbradient.so; do
+  mkdir -p $DEPLOY_FOLDER/usr/plugins/$(dirname $plugin)
+  cp $QT_PLUGINS_DIR/$plugin $DEPLOY_FOLDER/usr/plugins/$plugin || fail "Unable to find Qt plugin $plugin!"
+  LINUXDEPLOY_EXTRA_ARGS+=(--deploy-deps-only=$DEPLOY_FOLDER/usr/plugins/$plugin)
+done
+
 echo Creating AppImage
 pushd $INSTALLER_FOLDER
 # Don't bundle libva: the bundled build-environment version (jammy: VA-API 1.20/1.22)
@@ -151,6 +203,9 @@ pushd $INSTALLER_FOLDER
 # software decoding. The host always provides libva on systems where VA-API is
 # usable, so link against it at runtime instead (the AppRun shim above keeps a
 # bundled last-resort copy for hosts without libva).
+#
+# Don't bundle libwayland-*: like EGL and the Vulkan ICDs, they belong to the host graphics stack
+# (see opt/wayland-fallback above). SDL3 dlopen()s them and libdecor from the host.
 VERSION=$VERSION OUTPUT="Pyrolight-$VERSION-$(uname -m).AppImage" $LINUXDEPLOY --appdir $DEPLOY_FOLDER \
   --library=/usr/local/lib/libSDL3.so.0 \
   "${LINUXDEPLOY_EXTRA_ARGS[@]}" \
@@ -160,7 +215,13 @@ VERSION=$VERSION OUTPUT="Pyrolight-$VERSION-$(uname -m).AppImage" $LINUXDEPLOY -
   --exclude-library=libva-drm.so* \
   --exclude-library=libva-wayland.so* \
   --exclude-library=libva-x11.so* \
+  --exclude-library=libwayland-client.so* \
+  --exclude-library=libwayland-cursor.so* \
+  --exclude-library=libwayland-egl.so* \
+  --exclude-library=libwayland-server.so* \
   --output appimage || fail "linuxdeploy failed!"
 popd
+
+$SOURCE_ROOT/scripts/check-appimage-display-backends.sh $DEPLOY_FOLDER || fail "AppDir display backend check failed!"
 
 echo Build successful

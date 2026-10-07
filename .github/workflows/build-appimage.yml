@@ -62,7 +62,8 @@ jobs:
             libxext-dev libxi-dev libxinerama-dev libxkbcommon-dev libxrandr-dev \
             libxss-dev libxt-dev libxv-dev libxxf86vm-dev libxcb-dri3-dev \
             libx11-xcb-dev libxfixes-dev libxtst-dev wayland-protocols libopus-dev \
-            libvdpau-dev libgl-dev libpipewire-0.3-dev liburing-dev vulkan-sdk cmake
+            libvdpau-dev libgl-dev libpipewire-0.3-dev liburing-dev vulkan-sdk cmake \
+            libwayland-dev libdecor-0-dev qt6-wayland
           python3 -m pip install --user meson
           mkdir -p dep_root/bin
           echo "$(python3 -m site --user-base)/bin" >> "${GITHUB_PATH}"
@@ -79,7 +80,12 @@ jobs:
       - name: Build SDL3
         working-directory: deps/SDL
         run: |
-          cmake -DSDL_KMSDRM=OFF -DSDL_TEST_LIBRARY=OFF -DSDL_INSTALL_DOCS=OFF -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON -S . -B build
+          set -euo pipefail
+          cmake -DSDL_KMSDRM=OFF -DSDL_WAYLAND=ON -DSDL_WAYLAND_LIBDECOR=ON -DSDL_X11=ON -DSDL_TEST_LIBRARY=OFF -DSDL_INSTALL_DOCS=OFF -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON -S . -B build
+          # SDL silently drops video drivers whose dependencies are missing
+          for driver in SDL_VIDEO_DRIVER_WAYLAND SDL_VIDEO_DRIVER_WAYLAND_DYNAMIC_LIBDECOR SDL_VIDEO_DRIVER_X11; do
+            grep -q "^#define ${driver} " build/include-config-*/build_config/SDL_build_config.h || { echo "SDL3 was configured without ${driver}"; exit 1; }
+          done
           cmake --build build --parallel
           sudo cmake --install build
 
@@ -127,7 +133,7 @@ jobs:
         working-directory: deps/libva
         run: |
           ./autogen.sh
-          ./configure --enable-x11=yes --enable-glx=no --enable-drm=no --enable-wayland=no
+          ./configure --enable-x11=yes --enable-glx=no --enable-drm=no --enable-wayland=yes
           make -j"$(nproc)"
           sudo make install
 
@@ -217,6 +223,7 @@ jobs:
           find squashfs-root -type f -name 'libpyrowave-shared.so*' -print -quit | grep -F 'libpyrowave-shared.so'
           test -s squashfs-root/usr/share/licenses/pyrolight/Pyrolight-LICENSE
           test -s squashfs-root/usr/share/licenses/pyrolight/PyroWave-LICENSE
+          scripts/check-appimage-display-backends.sh squashfs-root
           mv "${source_asset}" "build/installer-release/${RELEASE_ASSET}"
 
       - name: Upload Linux release artifact

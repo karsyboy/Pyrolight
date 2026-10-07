@@ -513,6 +513,15 @@ bool PlVkRenderer::initialize(PDECODER_PARAMETERS params)
         }
     }
 
+    // SDL requests VK_KHR_surface plus the window system's surface extension
+    for (const char* extension : instanceExtensions) {
+        if (strcmp(extension, VK_KHR_SURFACE_EXTENSION_NAME) != 0 && strstr(extension, "_surface") != nullptr) {
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                        "Vulkan presentation surface: %s",
+                        extension);
+        }
+    }
+
     // Enumerate physical devices and choose one that is suitable for our needs.
     //
     // For HDR streaming, we try to find an HDR-capable Vulkan device first then

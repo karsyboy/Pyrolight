@@ -46,6 +46,7 @@
 #include "cli/commandlineparser.h"
 #include "path.h"
 #include "utils.h"
+#include "displaybackend.h"
 #include "gui/computermodel.h"
 #include "gui/appmodel.h"
 #include "backend/autoupdatechecker.h"
@@ -756,6 +757,10 @@ int main(int argc, char *argv[])
         SDL_SetHint("SDL_VIDEO_WAYLAND_MODE_SCALING", "aspect");
     }
 
+    // Prefer native Wayland on Qt versions that default to XWayland on some
+    // desktops. Qt still falls back to xcb if the Wayland plugin cannot start.
+    DisplayBackend::preferNativeWayland();
+
     QGuiApplication app(argc, argv);
     app.setApplicationDisplayName(QStringLiteral("Pyrolight"));
 
@@ -872,24 +877,29 @@ int main(int argc, char *argv[])
 
     // After the QGuiApplication is created, the platform stuff will be initialized
     // and we can set the SDL video driver to match Qt.
-    if (QGuiApplication::platformName() == "xcb") {
-        if (WMUtils::isRunningWayland()) {
-            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                        "Detected XWayland. This will probably break hardware decoding! Try running with QT_QPA_PLATFORM=wayland or switch to X11.");
-        }
-        qputenv("SDL_VIDEODRIVER", "x11");
+    DisplayBackend::Kind displayBackend = DisplayBackend::current();
+    if (displayBackend == DisplayBackend::Kind::XWayland) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "Detected XWayland. This will probably break hardware decoding! Try running with QT_QPA_PLATFORM=wayland or switch to X11.");
     }
-    else if (QGuiApplication::platformName().startsWith("wayland")) {
-        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "Detected Wayland");
-        qputenv("SDL_VIDEODRIVER", "wayland");
-    }
-#ifndef STEAM_LINK
-    // Force use of the KMSDRM backend for SDL when using Qt platform plugins
-    // that directly draw to the display without a windowing system.
-    else if (QGuiApplication::platformName() == "eglfs" || QGuiApplication::platformName() == "linuxfb") {
-        qputenv("SDL_VIDEODRIVER", "kmsdrm");
+    const char* sdlVideoDriver = DisplayBackend::sdlVideoDriver(displayBackend);
+#ifdef STEAM_LINK
+    // Only force KMSDRM for Qt platform plugins that directly draw to the
+    // display without a windowing system on platforms other than Steam Link.
+    if (displayBackend == DisplayBackend::Kind::Kms) {
+        sdlVideoDriver = nullptr;
     }
 #endif
+    if (sdlVideoDriver != nullptr) {
+        qputenv("SDL_VIDEODRIVER", sdlVideoDriver);
+    }
+    if (DisplayBackend::displayName(displayBackend) != nullptr) {
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                    "Display backend: %s (Qt platform: %s, SDL video driver: %s)",
+                    DisplayBackend::displayName(displayBackend),
+                    qPrintable(QGuiApplication::platformName()),
+                    sdlVideoDriver != nullptr ? sdlVideoDriver : "default");
+    }
 
 #ifdef HAVE_DRM_MASTER_HOOKS
     // Only use the Qt-SDL DRM master interoperability hooks if Qt is using KMS

@@ -620,8 +620,15 @@ pyrowave-smoke-test {
     SOURCES += tests/pyrowave_smoke.cpp
 }
 
-SOURCES += backend/networkbuffers.cpp backend/pyrowavecalibrator.cpp
-HEADERS += backend/networkbuffers.h backend/pyrowavecalibrator.h backend/pyrowavebandwidth.h
+# The AppImage loads libva-wayland at runtime instead of linking it (see vaapi.cpp)
+libva-wayland:dlopen-libva-wayland {
+    PKGCONFIG -= libva-wayland
+    DEFINES += LIBVA_WAYLAND_DLOPEN
+    LIBS += -ldl
+}
+
+SOURCES += backend/networkbuffers.cpp backend/pyrowavecalibrator.cpp displaybackend.cpp
+HEADERS += backend/networkbuffers.h backend/pyrowavecalibrator.h backend/pyrowavebandwidth.h displaybackend.h
 
 win32: LIBS += iphlpapi.lib advapi32.lib shell32.lib
 

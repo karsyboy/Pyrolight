@@ -51,6 +51,11 @@ chmod +x pyrolight-v*-linux-x86_64.AppImage
 ./pyrolight-v*-linux-x86_64.AppImage
 ```
 
+On Linux, Pyrolight runs natively on Wayland when a Wayland session is
+available and uses X11 (or XWayland) otherwise. **Settings → Advanced Settings →
+Display backend** shows which one is in use. Run with `QT_QPA_PLATFORM=xcb` to
+force X11/XWayland. See [Linux display backends](docs/LINUX_DISPLAY.md).
+
 This fork does not check for updates in the app; watch the releases page
 instead. macOS, Steam Link, ARM, Snap, Flatpak, and distribution packages are
 not published.
@@ -99,6 +104,9 @@ the **Default** profile.
   not advertise PyroWave, or not with the selected HDR/4:4:4 combination. Change
   those settings, or run `pyroshine healthcheck` on the host to check its
   PyroWave support.
+- **Linux window or input problems:** check **Display backend** in Settings,
+  then compare with `QT_QPA_PLATFORM=xcb ./pyrolight-v*-linux-x86_64.AppImage`
+  to see whether the issue is specific to native Wayland.
 - **General streaming problems:** see the upstream
   [Moonlight troubleshooting guide](https://github.com/moonlight-stream/moonlight-docs/wiki/Troubleshooting),
   and compare with H.264, HEVC, or AV1 to isolate PyroWave-specific issues.
@@ -112,6 +120,7 @@ stream settings, and client and host logs. On Windows, client logs are in
 - [PyroWave network tuning and calibration](docs/PYROWAVE_NETWORKING.md)
 - [PyroWave integration architecture](docs/PYROWAVE.md)
 - [Native controller metadata and validation](docs/NATIVE_CONTROLLERS.md)
+- [Linux display backends and AppImage packaging](docs/LINUX_DISPLAY.md)
 - [Building, testing, and releasing](CONTRIBUTING.md)
 - [Upstream Moonlight documentation](https://github.com/moonlight-stream/moonlight-docs/wiki)
 

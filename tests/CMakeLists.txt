@@ -34,6 +34,11 @@ foreach(frame_test IN ITEMS pyrowave-frame pyrowave-frame-winmacros)
     add_test(NAME ${frame_test} COMMAND ${frame_test})
 endforeach()
 
+add_executable(display-backend display_backend.cpp)
+target_compile_features(display-backend PRIVATE cxx_std_11)
+target_compile_options(display-backend PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG> $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG>)
+add_test(NAME display-backend COMMAND display-backend)
+
 add_executable(pyrowave-records pyrowave_records.cpp ../app/streaming/video/pyrowaveframing.cpp)
 target_compile_features(pyrowave-records PRIVATE cxx_std_17)
 add_test(NAME pyrowave-records COMMAND pyrowave-records)

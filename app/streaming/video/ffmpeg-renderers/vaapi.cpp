@@ -18,6 +18,39 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#ifdef LIBVA_WAYLAND_DLOPEN
+#include <dlfcn.h>
+#endif
+
+#ifdef HAVE_LIBVA_WAYLAND
+// The AppImage loads libva-wayland at runtime instead of linking it. It is a
+// separate package on some distributions, and libva-wayland must come from the
+// same libva build as libva itself, so linking it would make AppRun switch
+// hosts without it to the bundled libva set even on X11. Loaded this way, it
+// resolves from whichever libva set is in use, or VAAPI is unavailable on
+// Wayland only.
+static VADisplay getVaDisplayWl(struct wl_display* display)
+{
+#ifdef LIBVA_WAYLAND_DLOPEN
+    static decltype(&vaGetDisplayWl) fnVaGetDisplayWl = []() -> decltype(&vaGetDisplayWl) {
+        // Never unloaded: VADisplays created here call back into the library.
+        void* handle = dlopen("libva-wayland.so.2", RTLD_NOW | RTLD_LOCAL);
+        if (handle == nullptr) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                        "Unable to load libva-wayland: %s",
+                        dlerror());
+            return nullptr;
+        }
+        return (decltype(&vaGetDisplayWl))dlsym(handle, "vaGetDisplayWl");
+    }();
+
+    return fnVaGetDisplayWl != nullptr ? fnVaGetDisplayWl(display) : nullptr;
+#else
+    return vaGetDisplayWl(display);
+#endif
+}
+#endif
+
 VAAPIRenderer::VAAPIRenderer(int decoderSelectionPass)
     : IFFmpegRenderer(RendererType::VAAPI),
       m_DecoderSelectionPass(decoderSelectionPass),
@@ -130,7 +163,7 @@ VAAPIRenderer::openDisplay(SDL_Window* window)
     }
     else if (info.subsystem == SDL_SYSWM_WAYLAND) {
 #ifdef HAVE_LIBVA_WAYLAND
-        display = vaGetDisplayWl(info.info.wl.display);
+        display = getVaDisplayWl(info.info.wl.display);
         if (display == nullptr) {
             SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
                          "Unable to open Wayland display for VAAPI");
