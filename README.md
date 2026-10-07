@@ -17,6 +17,9 @@ Moonlight's standard codecs and features and adds an explicitly selected
 - H.264, HEVC, and AV1 with any Moonlight-compatible host.
 - PyroWave network calibration and receive-buffer diagnostics.
 - Named streaming profiles for switching between sets of stream settings.
+- Native Wayland on Linux, with automatic fallback to X11/XWayland. **Settings →
+  Advanced Settings → Display backend** shows which one is in use; see
+  [Linux display backends](docs/LINUX_DISPLAY.md).
 - Native model metadata for Xbox Elite, classic Steam Controller, Steam Deck and DualSense Edge on matching Pyroshine hosts; see [controller support and limits](docs/NATIVE_CONTROLLERS.md).
 
 PyroWave is an intra-only wavelet codec with very low GPU encode and decode
@@ -36,44 +39,27 @@ upstream Moonlight Qt.
 
 ## Installation
 
-Download a release from the
-[releases page](https://github.com/karsyboy/pyrolight/releases).
-Each release includes `SHA256SUMS`.
+Download the file for your system from the
+[releases page](https://github.com/karsyboy/pyrolight/releases) and install it:
 
-| Platform | Asset | Install |
+| System | Download | Install |
 | --- | --- | --- |
 | Windows | `*-windows-x64-installer.exe` | Run the installer |
 | Windows (portable) | `*-windows-x64-portable.zip` | Extract and run `Pyrolight.exe` |
-| Linux (any distribution) | `*-linux-x86_64.AppImage` | Make executable and run |
-| Linux packages | `.deb`, `.rpm`, `.pkg.tar.zst` | See below |
+| Arch Linux / CachyOS | `pyrolight-*.pkg.tar.zst` | `sudo pacman -U ./pyrolight-*.pkg.tar.zst` |
+| Debian / Ubuntu | `pyrolight_*.deb` | `sudo apt install ./pyrolight_*.deb` |
+| Fedora / RHEL | `pyrolight-*.rpm` | `sudo dnf install ./pyrolight-*.rpm` |
+| Other Linux | `*-linux-x86_64.AppImage` | `chmod +x pyrolight-*.AppImage`, then run it |
 
-```sh
-chmod +x pyrolight-v*-linux-x86_64.AppImage
-./pyrolight-v*-linux-x86_64.AppImage
-```
+To upgrade, install the newer release the same way. After installing a Linux
+package, start **Pyrolight** from the application menu or run `pyrolight`.
 
-To install Pyrolight system-wide with your package manager, download the package
-for your distribution:
-
-| Distribution | Install or upgrade |
-| --- | --- |
-| Arch Linux / CachyOS | `sudo pacman -U ./pyrolight-*.pkg.tar.zst` |
-| Debian / Ubuntu | `sudo apt install ./pyrolight_*.deb` |
-| Fedora / RHEL | `sudo dnf install ./pyrolight-*.rpm` |
-
-Then open **Pyrolight** from the application menu or run `pyrolight`. The
-packages need glibc 2.35 or later (Ubuntu 22.04, Debian 12, Fedora, RHEL 10,
-current Arch); RHEL 9 is not supported. They replace an installed `moonlight-qt`
-package because Pyrolight uses Moonlight's settings and desktop entry. See
-[Linux packages](docs/LINUX_PACKAGES.md).
-
-On Linux, Pyrolight runs natively on Wayland when a Wayland session is
-available and uses X11 (or XWayland) otherwise. **Settings → Advanced Settings →
-Display backend** shows which one is in use. Run with `QT_QPA_PLATFORM=xcb` to
-force X11/XWayland. See [Linux display backends](docs/LINUX_DISPLAY.md).
-
-This fork does not check for updates in the app; watch the releases page
-instead. macOS, Steam Link, ARM, Snap, and Flatpak builds are not published.
+- The Linux packages need Ubuntu 22.04, Debian 12, Fedora, RHEL 10, Arch or
+  newer (glibc 2.35). They replace an installed `moonlight-qt`; its settings and
+  paired hosts carry over. See [Linux packages](docs/LINUX_PACKAGES.md).
+- Each release includes `SHA256SUMS` for checking downloads.
+- Pyrolight does not check for updates; watch the releases page. macOS, Steam
+  Link, ARM, Snap, and Flatpak builds are not published.
 
 ## Streaming with PyroWave
 
@@ -120,8 +106,9 @@ the **Default** profile.
   those settings, or run `pyroshine healthcheck` on the host to check its
   PyroWave support.
 - **Linux window or input problems:** check **Display backend** in Settings,
-  then compare with `QT_QPA_PLATFORM=xcb ./pyrolight-v*-linux-x86_64.AppImage`
-  to see whether the issue is specific to native Wayland.
+  then start Pyrolight with `QT_QPA_PLATFORM=xcb` (for example
+  `QT_QPA_PLATFORM=xcb pyrolight`) to see whether the issue is specific to
+  native Wayland.
 - **General streaming problems:** see the upstream
   [Moonlight troubleshooting guide](https://github.com/moonlight-stream/moonlight-docs/wiki/Troubleshooting),
   and compare with H.264, HEVC, or AV1 to isolate PyroWave-specific issues.
