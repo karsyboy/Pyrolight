@@ -44,12 +44,28 @@ Each release includes `SHA256SUMS`.
 | --- | --- | --- |
 | Windows | `*-windows-x64-installer.exe` | Run the installer |
 | Windows (portable) | `*-windows-x64-portable.zip` | Extract and run `Pyrolight.exe` |
-| Linux | `*-linux-x86_64.AppImage` | Make executable and run |
+| Linux (any distribution) | `*-linux-x86_64.AppImage` | Make executable and run |
+| Linux packages | `.deb`, `.rpm`, `.pkg.tar.zst` | See below |
 
 ```sh
 chmod +x pyrolight-v*-linux-x86_64.AppImage
 ./pyrolight-v*-linux-x86_64.AppImage
 ```
+
+To install Pyrolight system-wide with your package manager, download the package
+for your distribution:
+
+| Distribution | Install or upgrade |
+| --- | --- |
+| Arch Linux / CachyOS | `sudo pacman -U ./pyrolight-*.pkg.tar.zst` |
+| Debian / Ubuntu | `sudo apt install ./pyrolight_*.deb` |
+| Fedora / RHEL | `sudo dnf install ./pyrolight-*.rpm` |
+
+Then open **Pyrolight** from the application menu or run `pyrolight`. The
+packages need glibc 2.35 or later (Ubuntu 22.04, Debian 12, Fedora, RHEL 10,
+current Arch); RHEL 9 is not supported. They replace an installed `moonlight-qt`
+package because Pyrolight uses Moonlight's settings and desktop entry. See
+[Linux packages](docs/LINUX_PACKAGES.md).
 
 On Linux, Pyrolight runs natively on Wayland when a Wayland session is
 available and uses X11 (or XWayland) otherwise. **Settings → Advanced Settings →
@@ -57,8 +73,7 @@ Display backend** shows which one is in use. Run with `QT_QPA_PLATFORM=xcb` to
 force X11/XWayland. See [Linux display backends](docs/LINUX_DISPLAY.md).
 
 This fork does not check for updates in the app; watch the releases page
-instead. macOS, Steam Link, ARM, Snap, Flatpak, and distribution packages are
-not published.
+instead. macOS, Steam Link, ARM, Snap, and Flatpak builds are not published.
 
 ## Streaming with PyroWave
 
@@ -121,6 +136,7 @@ stream settings, and client and host logs. On Windows, client logs are in
 - [PyroWave integration architecture](docs/PYROWAVE.md)
 - [Native controller metadata and validation](docs/NATIVE_CONTROLLERS.md)
 - [Linux display backends and AppImage packaging](docs/LINUX_DISPLAY.md)
+- [Linux distribution packages](docs/LINUX_PACKAGES.md)
 - [Building, testing, and releasing](CONTRIBUTING.md)
 - [Upstream Moonlight documentation](https://github.com/moonlight-stream/moonlight-docs/wiki)
 

@@ -65,6 +65,10 @@ splits libraries as follows.
 | EGL, GL, GBM, DRM, Vulkan ICDs | Host | Unchanged. |
 | Qt platform plugins | Bundled | `xcb` (with `xcbglintegrations`), `wayland` (generic), `wayland-egl`, the `wayland-egl` client buffer integration, `xdg-shell` and the `bradient` decorations. |
 
+The `.deb`, `.rpm` and Arch packages install this same payload in
+`/opt/pyrolight`, so the boundary and probes are identical; see
+[Linux packages](LINUX_PACKAGES.md).
+
 AppRun checks libwayland-client before libva because `libva-wayland` needs it.
 `scripts/check-appimage-display-backends.sh` verifies this boundary on every
 release build.

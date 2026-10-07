@@ -81,6 +81,17 @@ libva in `usr/lib`; the build stages host-preferred fallbacks and ends with
 `scripts/check-appimage-display-backends.sh`. See
 [Linux display backends](docs/LINUX_DISPLAY.md) for the packaging boundary.
 
+The `.deb`, `.rpm` and Arch packages are built from the extracted AppImage with
+[nfpm](https://nfpm.goreleaser.com/) (the version pinned in
+[build-appimage.yml](.github/workflows/build-appimage.yml)):
+
+```sh
+./Pyrolight-*.AppImage --appimage-extract
+VERSION=6.2.1 scripts/build-linux-packages.sh squashfs-root build/packages
+```
+
+See [Linux packages](docs/LINUX_PACKAGES.md).
+
 ### Windows x64
 
 Install Visual Studio 2022, Qt 6.10.2 with the MSVC 2022 x64 kit, CMake, Git
@@ -168,6 +179,11 @@ names, translation catalogs and compatibility identities stay intact to keep
 upstream merges small and retain settings, paired hosts and installer upgrades.
 `app/brandtranslator.h` rebrands translated client references without rewriting
 upstream source strings. Keep upstream help links and external tool names.
+
+On Linux the icon is installed as `pyrolight` (`Icon=pyrolight` in the desktop
+entry), not `moonlight`: icon themes such as Papirus ship a `moonlight` icon
+that would otherwise show Moonlight's logo. `scripts/check-linux-icons.sh`
+verifies an AppDir or package staging tree.
 
 The logo follows Pyroshine's flame-and-orbit style with a crescent center. To
 regenerate Windows, macOS, Steam Link and Linux/Qt icons from the source PNG:

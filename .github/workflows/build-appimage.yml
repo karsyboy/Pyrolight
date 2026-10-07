@@ -224,12 +224,34 @@ jobs:
           test -s squashfs-root/usr/share/licenses/pyrolight/Pyrolight-LICENSE
           test -s squashfs-root/usr/share/licenses/pyrolight/PyroWave-LICENSE
           scripts/check-appimage-display-backends.sh squashfs-root
+          scripts/check-linux-icons.sh squashfs-root
           mv "${source_asset}" "build/installer-release/${RELEASE_ASSET}"
+
+      - name: Install nfpm
+        working-directory: dep_root/bin
+        run: |
+          set -euo pipefail
+          curl --fail --location --remote-name https://github.com/goreleaser/nfpm/releases/download/v2.47.0/nfpm_2.47.0_Linux_x86_64.tar.gz
+          echo '0660ca602b2d2d2ae4781a06c692b3eeb9d437ffea05b831d76e41f4a3188783  nfpm_2.47.0_Linux_x86_64.tar.gz' | sha256sum --check --strict
+          tar xzf nfpm_2.47.0_Linux_x86_64.tar.gz nfpm
+          rm nfpm_2.47.0_Linux_x86_64.tar.gz
+
+      - name: Build the .deb, .rpm and Arch packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Built from the verified AppImage payload, next to the AppImage.
+          VERSION="${CI_VERSION}" scripts/build-linux-packages.sh squashfs-root build/installer-release
+          ls -l build/installer-release
 
       - name: Upload Linux release artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
         with:
           name: pyrolight-${{ inputs.release_tag }}-linux-x86_64
-          path: build/installer-release/${{ env.RELEASE_ASSET }}
+          path: |
+            build/installer-release/${{ env.RELEASE_ASSET }}
+            build/installer-release/pyrolight_*.deb
+            build/installer-release/pyrolight-*.rpm
+            build/installer-release/pyrolight-*.pkg.tar.zst
           compression-level: 0
           if-no-files-found: error

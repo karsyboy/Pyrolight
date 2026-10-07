@@ -1,0 +1,165 @@
+# nfpm configuration for the Pyrolight .deb, .rpm and Arch packages. Run by
+# scripts/build-linux-packages.sh from its staging directory (relative paths
+# below), which contains the verified AppImage payload. VERSION is set by the
+# script.
+#
+# The packages install that payload in /opt/pyrolight: Pyrolight needs pinned
+# SDL3, FFmpeg, libplacebo and PyroWave builds that distributions do not ship.
+# The host graphics stack (glibc, GL/EGL, X11, libwayland, libva, Vulkan
+# drivers) comes from the distribution, as with the AppImage.
+
+name: pyrolight
+arch: amd64 # nfpm maps this to the native architecture for each packager.
+platform: linux
+version: ${VERSION}
+release: "1"
+maintainer: "Pyrolight contributors"
+description: |
+  Game-streaming client with PyroWave support.
+  A Moonlight Qt fork for Pyroshine and other compatible hosts.
+homepage: "https://github.com/karsyboy/pyrolight"
+license: "GPL-3.0-or-later"
+
+# Pyrolight keeps Moonlight's desktop ID, AppStream ID and settings location.
+conflicts:
+  - moonlight-qt
+
+contents:
+  - src: ./opt/pyrolight
+    dst: /opt/pyrolight
+    type: tree
+  - src: ./usr/bin/pyrolight
+    dst: /usr/bin/pyrolight
+    file_info:
+      mode: 0755
+  - src: ./usr/share/applications/com.moonlight_stream.Moonlight.desktop
+    dst: /usr/share/applications/com.moonlight_stream.Moonlight.desktop
+  - src: ./usr/share/icons/hicolor/scalable/apps/pyrolight.svg
+    dst: /usr/share/icons/hicolor/scalable/apps/pyrolight.svg
+  - src: ./usr/share/metainfo/com.moonlight_stream.Moonlight.appdata.xml
+    dst: /usr/share/metainfo/com.moonlight_stream.Moonlight.appdata.xml
+  # License locations differ per distribution.
+  - src: ./licenses
+    dst: /usr/share/licenses/pyrolight
+    type: tree
+    packager: rpm
+  - src: ./licenses
+    dst: /usr/share/licenses/pyrolight
+    type: tree
+    packager: archlinux
+  - src: ./licenses/Pyrolight-LICENSE
+    dst: /usr/share/doc/pyrolight/copyright
+    packager: deb
+  - src: ./licenses/PyroWave-LICENSE
+    dst: /usr/share/doc/pyrolight/PyroWave-LICENSE
+    packager: deb
+
+# Host libraries the bundle links against or SDL loads at runtime. glibc 2.35
+# and GCC 12's libstdc++ are the build environment's (Ubuntu 22.04) minimums.
+overrides:
+  deb:
+    depends:
+      - libc6 (>= 2.35)
+      - libstdc++6 (>= 12)
+      - libgcc-s1
+      - libgl1
+      - libglx0
+      - libegl1
+      - libopengl0
+      - libdrm2
+      - libx11-6
+      - libx11-xcb1
+      - libxcb1
+      - libxcb-dri3-0
+      - libxext6
+      - libxfixes3
+      - libxi6
+      - libxcursor1
+      - libxrandr2
+      - libxss1
+      - libxtst6
+      - libice6
+      - libsm6
+      - libfontconfig1
+      - libfreetype6
+      - libharfbuzz0b
+      - zlib1g
+      - libcom-err2
+      - libgpg-error0
+      - libwayland-client0
+      - libwayland-cursor0
+      - libwayland-egl1
+      - libudev1
+      - libasound2
+    recommends:
+      - libva2
+      - libva-x11-2
+      - libva-wayland2
+      - libpulse0
+      - libdecor-0-0
+      - mesa-vulkan-drivers | vulkan-icd
+  rpm:
+    depends:
+      - glibc >= 2.35
+      - libstdc++ >= 12
+      - libgcc
+      - libglvnd-glx
+      - libglvnd-egl
+      - libglvnd-opengl
+      - libdrm
+      - libX11
+      - libX11-xcb
+      - libxcb
+      - libXext
+      - libXfixes
+      - libXi
+      - libXcursor
+      - libXrandr
+      - libXScrnSaver
+      - libXtst
+      - libICE
+      - libSM
+      - fontconfig
+      - freetype
+      - harfbuzz
+      - zlib
+      - libcom_err
+      - libgpg-error
+      - libwayland-client
+      - libwayland-cursor
+      - libwayland-egl
+      - systemd-libs
+      - alsa-lib
+    recommends:
+      - libva
+      - pulseaudio-libs
+      - libdecor
+      - mesa-vulkan-drivers
+  archlinux:
+    depends:
+      - glibc>=2.35
+      - gcc-libs
+      - libglvnd
+      - libdrm
+      - libx11
+      - libxcb
+      - libxext
+      - libxfixes
+      - libxi
+      - libxcursor
+      - libxrandr
+      - libxss
+      - libxtst
+      - libice
+      - libsm
+      - fontconfig
+      - freetype2
+      - harfbuzz
+      - zlib
+      - e2fsprogs
+      - libgpg-error
+      - wayland
+      - systemd-libs
+      - alsa-lib
+      # nfpm cannot write Arch optdepends; Arch's libva includes every backend.
+      - libva

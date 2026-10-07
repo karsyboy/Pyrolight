@@ -154,7 +154,7 @@ jobs:
           if-no-files-found: error
 
   linux:
-    name: Linux x86_64 AppImage
+    name: Linux x86_64 AppImage and packages
     needs: version
     uses: ./.github/workflows/build-appimage.yml
     with:
@@ -186,6 +186,9 @@ jobs:
             "pyrolight-${{ needs.version.outputs.release_tag }}-windows-x64-installer.exe"
             "pyrolight-${{ needs.version.outputs.release_tag }}-windows-x64-portable.zip"
             "pyrolight-${{ needs.version.outputs.release_tag }}-linux-x86_64.AppImage"
+            "pyrolight_${{ needs.version.outputs.release_version }}-1_amd64.deb"
+            "pyrolight-${{ needs.version.outputs.release_version }}-1.x86_64.rpm"
+            "pyrolight-${{ needs.version.outputs.release_version }}-1-x86_64.pkg.tar.zst"
           )
           for asset in "${expected[@]}"; do
             test -s "release-assets/${asset}" || {

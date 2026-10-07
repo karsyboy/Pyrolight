@@ -47,6 +47,7 @@ Related repositories:
 | `app/tests/` | Renderer smoke test and streaming-preferences Qt test |
 | `scripts/pyrowave-patches/`, `scripts/build-pyrowave-appimage.sh` | Pinned PyroWave patches and AppImage build |
 | `scripts/build-appimage.sh`, `scripts/check-appimage-display-backends.sh`, `app/deploy/linux/*-probe.c` | AppImage packaging, host-library probes and packaging checks |
+| `scripts/build-linux-packages.sh`, `app/deploy/linux/nfpm.yaml`, `scripts/check-linux-icons.sh` | `.deb`/`.rpm`/Arch packages built from the AppImage payload; Linux icon checks |
 | `.github/workflows/` | `release.yml` (tag-triggered Windows and Linux release) and `build-appimage.yml` |
 | `wix/`, `app/deploy/`, `scripts/` | Upstream packaging, with fork branding |
 
@@ -61,6 +62,7 @@ Everything else under `app/` is upstream Moonlight code.
 | Decoder, renderer, color, bitrate, PyroWave pin | `docs/PYROWAVE.md` |
 | Dialects, receive buffers, calibration | `docs/PYROWAVE_NETWORKING.md` |
 | Linux Wayland/X11 selection, AppImage graphics-stack packaging | `docs/LINUX_DISPLAY.md` |
+| Linux distribution packages, dependencies, icon name | `docs/LINUX_PACKAGES.md` |
 | Common-c protocol extension | `moonlight-common-c/moonlight-common-c/docs/pyrowave.md` |
 | Host-side protocol and probe | Pyroshine `docs/PYROWAVE.md`, `docs/PYROWAVE_COMPATIBILITY.md`, `docs/DUALSENSE_EDGE.md` |
 | General Moonlight behavior | Upstream code and the [Moonlight wiki](https://github.com/moonlight-stream/moonlight-docs/wiki) |
@@ -94,6 +96,10 @@ Everything else under `app/` is upstream Moonlight code.
   `xcb` fallback) and SDL always follows it; both are built into the AppImage.
   libwayland and libva are host graphics-stack libraries, never bundled in
   `usr/lib`; `scripts/check-appimage-display-backends.sh` must pass.
+- **Linux icon and packages**: the desktop entry uses `Icon=pyrolight` and the
+  icon is installed as `pyrolight` (never `moonlight`, which icon themes
+  override); `scripts/check-linux-icons.sh` must pass. Every release ships the
+  AppImage plus `.deb`, `.rpm` and Arch packages of the same payload.
 
 ## Compatibility
 

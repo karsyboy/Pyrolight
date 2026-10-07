@@ -2,7 +2,7 @@
 Name=Pyrolight
 Comment=Game streaming with PyroWave support
 Exec=pyrolight
-Icon=moonlight
+Icon=pyrolight
 Terminal=false
 Type=Application
 Categories=Qt;Game;

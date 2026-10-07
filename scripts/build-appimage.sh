@@ -223,5 +223,6 @@ VERSION=$VERSION OUTPUT="Pyrolight-$VERSION-$(uname -m).AppImage" $LINUXDEPLOY -
 popd
 
 $SOURCE_ROOT/scripts/check-appimage-display-backends.sh $DEPLOY_FOLDER || fail "AppDir display backend check failed!"
+$SOURCE_ROOT/scripts/check-linux-icons.sh $DEPLOY_FOLDER || fail "AppDir icon check failed!"
 
 echo Build successful
