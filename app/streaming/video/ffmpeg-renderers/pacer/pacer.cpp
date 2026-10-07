@@ -306,6 +306,11 @@ bool Pacer::initialize(SDL_Window* window, int maxVideoFps, bool enablePacing)
             delete m_VsyncSource;
             m_VsyncSource = nullptr;
         }
+        else if (m_VsyncSource != nullptr) {
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                        "Frame pacing V-sync source: %s",
+                        info.subsystem == SDL_SYSWM_WAYLAND ? "Wayland frame callbacks" : "DXGI");
+        }
     }
     else {
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,

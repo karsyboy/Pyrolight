@@ -57,8 +57,8 @@ before changing the pin.
 ### Linux
 
 Install Qt 6, CMake, Vulkan development tools, FFmpeg, libplacebo, SDL2,
-SDL2_ttf, OpenSSL, Opus, and the VA-API/VDPAU/X11 development packages for
-your distribution. With PyroWave installed as above:
+SDL2_ttf, OpenSSL, Opus, and the VA-API/VDPAU/X11/Wayland development packages
+for your distribution. With PyroWave installed as above:
 
 ```sh
 export PKG_CONFIG_PATH="$PWD/build/pyrowave-install/share/pkgconfig:$PKG_CONFIG_PATH"
@@ -75,6 +75,22 @@ In that environment, build PyroWave (with patches) and the AppImage with:
 ```sh
 PYROWAVE_SOURCE="$PWD/deps/PyroWave" scripts/build-pyrowave-appimage.sh
 ```
+
+The AppImage includes native Wayland and X11. It never bundles libwayland or
+libva in `usr/lib`; the build stages host-preferred fallbacks and ends with
+`scripts/check-appimage-display-backends.sh`. See
+[Linux display backends](docs/LINUX_DISPLAY.md) for the packaging boundary.
+
+The `.deb`, `.rpm` and Arch packages are built from the extracted AppImage with
+[nfpm](https://nfpm.goreleaser.com/) (the version pinned in
+[build-appimage.yml](.github/workflows/build-appimage.yml)):
+
+```sh
+./Pyrolight-*.AppImage --appimage-extract
+VERSION=6.2.1 scripts/build-linux-packages.sh squashfs-root build/packages
+```
+
+See [Linux packages](docs/LINUX_PACKAGES.md).
 
 ### Windows x64
 
@@ -110,8 +126,9 @@ ctest --test-dir build/tests --output-on-failure
 ```
 
 They cover native controller identities, protocol capabilities and normalized paddle press/release, PyroWave color
-mapping, frame validation, record parsing and recovery, bandwidth math, and
-golden bitstreams from both the client and host forks. When Qt5, OpenSSL and a
+mapping, frame validation, record parsing and recovery, bandwidth math,
+Linux display backend selection, and golden bitstreams from both the client and
+host forks. When Qt5, OpenSSL and a
 built `moonlight-common-c` library are available, the project also builds
 `pyrowave-https`; run its TLS calibration harness with:
 
@@ -137,7 +154,13 @@ make -C build/prefs-test
 ```
 
 The PyroWave renderer smoke test needs a Vulkan-capable display; see
-[renderer smoke test](docs/PYROWAVE.md#renderer-smoke-test).
+[renderer smoke test](docs/PYROWAVE.md#renderer-smoke-test). Run it with
+`SDL_VIDEODRIVER=wayland` and `SDL_VIDEODRIVER=x11` after window-system changes.
+
+To check the display backend packaging of an AppImage, extract it and run
+`scripts/check-appimage-display-backends.sh squashfs-root`. Runtime checks for
+native Wayland, X11 and XWayland are listed in
+[Linux display backends](docs/LINUX_DISPLAY.md#validation).
 
 Automated tests do not establish live HDR output, sustained bitrate, NIC
 behavior, reconnects or controller hardware. For decoder, renderer, network or
@@ -156,6 +179,11 @@ names, translation catalogs and compatibility identities stay intact to keep
 upstream merges small and retain settings, paired hosts and installer upgrades.
 `app/brandtranslator.h` rebrands translated client references without rewriting
 upstream source strings. Keep upstream help links and external tool names.
+
+On Linux the icon is installed as `pyrolight` (`Icon=pyrolight` in the desktop
+entry), not `moonlight`: icon themes such as Papirus ship a `moonlight` icon
+that would otherwise show Moonlight's logo. `scripts/check-linux-icons.sh`
+verifies an AppDir or package staging tree.
 
 The logo follows Pyroshine's flame-and-orbit style with a crescent center. To
 regenerate Windows, macOS, Steam Link and Linux/Qt icons from the source PNG:

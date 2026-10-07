@@ -620,8 +620,23 @@ pyrowave-smoke-test {
     SOURCES += tests/pyrowave_smoke.cpp
 }
 
-SOURCES += backend/networkbuffers.cpp backend/pyrowavecalibrator.cpp
-HEADERS += backend/networkbuffers.h backend/pyrowavecalibrator.h backend/pyrowavebandwidth.h
+# Install the Pyrolight icon as "pyrolight" (the desktop entry's Icon=). Icon
+# themes such as Papirus ship their own "moonlight" icon, which would replace
+# Pyrolight's in menus and, on Wayland, on the window itself.
+unix:!macx {
+    icons.files =
+    icons.extra = $(INSTALL_FILE) $$PWD/res/moonlight.svg $(INSTALL_ROOT)$$icons.path/pyrolight.svg
+}
+
+# The AppImage loads libva-wayland at runtime instead of linking it (see vaapi.cpp)
+libva-wayland:dlopen-libva-wayland {
+    PKGCONFIG -= libva-wayland
+    DEFINES += LIBVA_WAYLAND_DLOPEN
+    LIBS += -ldl
+}
+
+SOURCES += backend/networkbuffers.cpp backend/pyrowavecalibrator.cpp displaybackend.cpp
+HEADERS += backend/networkbuffers.h backend/pyrowavecalibrator.h backend/pyrowavebandwidth.h displaybackend.h
 
 win32: LIBS += iphlpapi.lib advapi32.lib shell32.lib
 

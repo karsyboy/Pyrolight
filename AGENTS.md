@@ -40,11 +40,14 @@ Related repositories:
 | `app/settings/streamingpreferences.*`, `bitratecalculator.h` | Preferences, streaming profiles, PyroWave availability and default bitrate |
 | `app/backend/networkbuffers.*`, `pyrowavecalibrator.*`, `pyrowavebandwidth.h`, `nvhttp.cpp` | Receive-buffer diagnostics/remediation, bandwidth calibration, HTTPS probe |
 | `app/gui/SettingsView.qml` | Settings UI, including profiles, PyroWave and network tools |
+| `app/displaybackend.*` | Linux display backend policy: Qt platform preference, SDL driver matching, Settings diagnostic |
 | `app/cli/commandlineparser.cpp` | CLI options, including `--video-codec PyroWave` |
 | `moonlight-common-c/moonlight-common-c/` | Submodule fork: RTSP/SDP, RTP/FEC reassembly, PyroWave dialects, controller protocol |
 | `tests/` | Standalone CMake unit tests for fork code |
 | `app/tests/` | Renderer smoke test and streaming-preferences Qt test |
 | `scripts/pyrowave-patches/`, `scripts/build-pyrowave-appimage.sh` | Pinned PyroWave patches and AppImage build |
+| `scripts/build-appimage.sh`, `scripts/check-appimage-display-backends.sh`, `app/deploy/linux/*-probe.c` | AppImage packaging, host-library probes and packaging checks |
+| `scripts/build-linux-packages.sh`, `app/deploy/linux/nfpm.yaml`, `scripts/check-linux-icons.sh` | `.deb`/`.rpm`/Arch packages built from the AppImage payload; Linux icon checks |
 | `.github/workflows/` | `release.yml` (tag-triggered Windows and Linux release) and `build-appimage.yml` |
 | `wix/`, `app/deploy/`, `scripts/` | Upstream packaging, with fork branding |
 
@@ -58,6 +61,8 @@ Everything else under `app/` is upstream Moonlight code.
 | Build, tests, release | `CONTRIBUTING.md`; `.github/workflows/` for exact CI steps |
 | Decoder, renderer, color, bitrate, PyroWave pin | `docs/PYROWAVE.md` |
 | Dialects, receive buffers, calibration | `docs/PYROWAVE_NETWORKING.md` |
+| Linux Wayland/X11 selection, AppImage graphics-stack packaging | `docs/LINUX_DISPLAY.md` |
+| Linux distribution packages, dependencies, icon name | `docs/LINUX_PACKAGES.md` |
 | Common-c protocol extension | `moonlight-common-c/moonlight-common-c/docs/pyrowave.md` |
 | Host-side protocol and probe | Pyroshine `docs/PYROWAVE.md`, `docs/PYROWAVE_COMPATIBILITY.md`, `docs/DUALSENSE_EDGE.md` |
 | General Moonlight behavior | Upstream code and the [Moonlight wiki](https://github.com/moonlight-stream/moonlight-docs/wiki) |
@@ -87,6 +92,14 @@ Everything else under `app/` is upstream Moonlight code.
   runtime and license in every release asset.
 - A build without `CONFIG+=enable-pyrowave` must still compile and run the
   standard codecs.
+- **Linux display backends**: Qt chooses the platform (native Wayland preferred,
+  `xcb` fallback) and SDL always follows it; both are built into the AppImage.
+  libwayland and libva are host graphics-stack libraries, never bundled in
+  `usr/lib`; `scripts/check-appimage-display-backends.sh` must pass.
+- **Linux icon and packages**: the desktop entry uses `Icon=pyrolight` and the
+  icon is installed as `pyrolight` (never `moonlight`, which icon themes
+  override); `scripts/check-linux-icons.sh` must pass. Every release ships the
+  AppImage plus `.deb`, `.rpm` and Arch packages of the same payload.
 
 ## Compatibility
 

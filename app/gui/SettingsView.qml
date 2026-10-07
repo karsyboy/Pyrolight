@@ -2094,6 +2094,25 @@ Flickable {
                                   qsTr("You can toggle it at any time while streaming using Ctrl+Alt+Shift+S or Select+L1+R1+X.") + "\n\n" +
                                   qsTr("The performance overlay is not supported on Steam Link or Raspberry Pi.")
                 }
+
+                // Read-only diagnostic of the window system Pyrolight is using (Linux only)
+                Label {
+                    width: parent.width
+                    id: displayBackendTitle
+                    text: qsTr("Display backend")
+                    font.pointSize: 12
+                    wrapMode: Text.Wrap
+                    visible: SystemProperties.displayBackend !== ""
+                }
+
+                Label {
+                    width: parent.width
+                    id: displayBackendValue
+                    text: SystemProperties.displayBackend
+                    font.pointSize: 9
+                    wrapMode: Text.Wrap
+                    visible: SystemProperties.displayBackend !== ""
+                }
             }
         }
     }

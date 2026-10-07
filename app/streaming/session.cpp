@@ -673,6 +673,9 @@ bool Session::initialize(QQuickWindow* qtWindow)
                      SDL_GetError());
         return false;
     }
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                "SDL video driver: %s",
+                SDL_GetCurrentVideoDriver());
 
     // Stop text input. SDL enables it by default
     // when we initialize the video subsystem, but this

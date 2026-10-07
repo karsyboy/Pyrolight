@@ -1,5 +1,6 @@
 #include "systemproperties.h"
 #include "utils.h"
+#include "displaybackend.h"
 
 #include <QGuiApplication>
 #include <QLibraryInfo>
@@ -49,7 +50,8 @@ SystemProperties::SystemProperties()
     versionString = QString(VERSION_STR);
     hasDesktopEnvironment = WMUtils::isRunningDesktopEnvironment();
     isRunningWayland = WMUtils::isRunningWayland();
-    isRunningXWayland = isRunningWayland && QGuiApplication::platformName() == "xcb";
+    isRunningXWayland = DisplayBackend::current() == DisplayBackend::Kind::XWayland;
+    displayBackend = QString::fromLatin1(DisplayBackend::displayName(DisplayBackend::current()));
     usesMaterial3Theme = QLibraryInfo::version() >= QVersionNumber(6, 5, 0);
 
 #ifdef Q_OS_DARWIN
