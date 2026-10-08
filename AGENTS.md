@@ -46,7 +46,7 @@ Related repositories:
 | `moonlight-common-c/moonlight-common-c/` | Submodule fork: RTSP/SDP, RTP/FEC reassembly, PyroWave dialects, controller protocol |
 | `tests/` | Standalone CMake unit tests for fork code |
 | `app/tests/` | Renderer smoke test and streaming-preferences Qt test |
-| `scripts/pyrowave-patches/`, `scripts/build-pyrowave-appimage.sh` | Pinned PyroWave patches and AppImage build |
+| `scripts/build-pyrowave-appimage.sh` | Pinned PyroWave AppImage build |
 | `scripts/build-appimage.sh`, `scripts/check-appimage-display-backends.sh`, `app/deploy/linux/*-probe.c` | AppImage packaging, host-library probes and packaging checks |
 | `scripts/build-linux-packages.sh`, `app/deploy/linux/nfpm.yaml`, `scripts/check-linux-icons.sh` | `.deb`/`.rpm`/Arch packages built from the AppImage payload; Linux icon checks |
 | `app/deploy/linux/aur/` | `pyrolight-bin` AUR PKGBUILD repackaging the release Arch package; update and publish scripts |
@@ -115,9 +115,9 @@ Everything else under `app/` is upstream Moonlight code.
   compatible with upstream-style hosts (Sunshine, GameStream) for standard
   codecs. Capability bits and SDP attributes are shared contracts; change them
   only together with the host and common-c.
-- The PyroWave pin (`e344479`, C API 0.7.0) appears in both workflows,
-  `CONTRIBUTING.md` and `docs/PYROWAVE.md`; keep them identical and apply
-  `scripts/pyrowave-patches/`. The host may pin a newer revision of the same
+- The PyroWave pin (`689854d`, C API 1.1.0) appears in both workflows,
+  `CONTRIBUTING.md` and `docs/PYROWAVE.md`; keep them identical. The fork
+  carries its own patches. The host may pin a newer revision of the same
   fork; the bitstream family (`186f0393`) must stay decodable.
 - Fork code must compile on Windows (MSVC, `min`/`max` macros) and Linux; tests
   include a Windows-macro build of the frame rules.

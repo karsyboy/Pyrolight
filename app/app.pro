@@ -609,13 +609,13 @@ enable-pyrowave {
     !libplacebo: error("PyroWave requires the libplacebo Vulkan renderer")
 
     win32 {
-        isEmpty(PYROWAVE_PREFIX): error("Set PYROWAVE_PREFIX to the installed PyroWave 0.7.0 C API")
+        isEmpty(PYROWAVE_PREFIX): error("Set PYROWAVE_PREFIX to the installed PyroWave 1.1.0 C API")
         !exists($$PYROWAVE_PREFIX/include/pyrowave/pyrowave.h): error("PyroWave header not found under PYROWAVE_PREFIX")
         !exists($$PYROWAVE_PREFIX/lib/pyrowave-shared.lib): error("PyroWave import library not found under PYROWAVE_PREFIX")
         INCLUDEPATH += $$PYROWAVE_PREFIX/include
         LIBS += -L$$PYROWAVE_PREFIX/lib -lpyrowave-shared
     } else:linux {
-        !packagesExist("pyrowave-shared = 0.7.0"): error("PyroWave requires patched standalone API 0.7.0")
+        !packagesExist("pyrowave-shared = 1.1.0"): error("PyroWave requires the karsyboy/pyrowave fork API 1.1.0")
         PKGCONFIG += pyrowave-shared
         INCLUDEPATH += $$system(pkg-config --variable=prefix pyrowave-shared)/include
     } else {

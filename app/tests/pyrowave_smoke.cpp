@@ -60,7 +60,7 @@ public:
         std::vector<uint32_t> frame(65536 / 4);
         for (int i = 0; i < 24; i++) {
             for (size_t n = 0; n < y.size(); n++) y[n] = uint8_t(n + i * 5);
-            REQUIRE(pyrowave_encoder_encode_cpu_synchronous(encoder, &input, &rate) == PYROWAVE_SUCCESS);
+            REQUIRE(pyrowave_encoder_encode_cpu(encoder, &input, &rate) == PYROWAVE_SUCCESS);
             pyrowave_packet packet {}; size_t count;
             REQUIRE(pyrowave_encoder_packetize(encoder, &packet, 65536, &count, frame.data(), frame.size() * 4) == PYROWAVE_SUCCESS);
             REQUIRE(count == 1 && packet.offset == 0);
