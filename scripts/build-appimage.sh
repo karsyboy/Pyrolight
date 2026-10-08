@@ -52,16 +52,16 @@ QMAKE_CONFIG=(CONFIG+=disable-libdrm CONFIG+=dlopen-libva-wayland PREFIX=$DEPLOY
 LINUXDEPLOY_EXTRA_ARGS=()
 if [ -n "${PYROWAVE_PREFIX:-}" ]; then
   PYROWAVE_PREFIX=$(readlink -f "$PYROWAVE_PREFIX")
-  [ -f "$PYROWAVE_PREFIX/share/pkgconfig/pyrowave-shared.pc" ] || fail "Invalid PYROWAVE_PREFIX: pyrowave-shared.pc not found"
-  [ -f "$PYROWAVE_PREFIX/lib/libpyrowave-shared.so.0" ] || fail "Invalid PYROWAVE_PREFIX: libpyrowave-shared.so.0 not found"
+  [ -f "$PYROWAVE_PREFIX/lib/pkgconfig/pyrowave-shared.pc" ] || fail "Invalid PYROWAVE_PREFIX: pyrowave-shared.pc not found"
+  [ -f "$PYROWAVE_PREFIX/lib/libpyrowave-shared.so.1" ] || fail "Invalid PYROWAVE_PREFIX: libpyrowave-shared.so.1 not found"
   [ -f "$PYROWAVE_PREFIX/share/licenses/pyrowave/LICENSE" ] || fail "Invalid PYROWAVE_PREFIX: PyroWave license not found"
-  export PKG_CONFIG_PATH="$PYROWAVE_PREFIX/share/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+  export PKG_CONFIG_PATH="$PYROWAVE_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
   # linuxdeploy resolves the executable's DT_NEEDED entries before processing
   # explicit --library arguments, so the private PyroWave prefix must also be
   # visible to its dependency scanner.
   export LD_LIBRARY_PATH="$PYROWAVE_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
   QMAKE_CONFIG+=(CONFIG+=enable-pyrowave)
-  LINUXDEPLOY_EXTRA_ARGS+=(--library="$PYROWAVE_PREFIX/lib/libpyrowave-shared.so.0")
+  LINUXDEPLOY_EXTRA_ARGS+=(--library="$PYROWAVE_PREFIX/lib/libpyrowave-shared.so.1")
 fi
 qmake6 $SOURCE_ROOT/moonlight-qt.pro "${QMAKE_CONFIG[@]}" || fail "Qmake failed!"
 popd

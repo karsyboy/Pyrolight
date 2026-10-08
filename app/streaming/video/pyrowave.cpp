@@ -208,9 +208,9 @@ bool PyroWaveVideoDecoder::initialize(PDECODER_PARAMETERS params)
 {
     uint32_t major, minor, patch;
     pyrowave_get_api_version(&major, &minor, &patch);
-    if (major != 0 || minor != 7 || patch != 0) {
+    if (major != 1 || minor != 1 || patch != 0) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-                     "PyroWave C API %u.%u.%u is incompatible; exactly 0.7.0 is required",
+                     "PyroWave C API %u.%u.%u is incompatible; exactly 1.1.0 is required",
                      major, minor, patch);
         return false;
     }

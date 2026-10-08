@@ -36,7 +36,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: karsyboy/pyrowave
-          ref: e344479d6c0439e346c788a918ad5645713f7573
+          ref: 689854dd9727fc2239699c386e69355189fbf332
           path: deps/PyroWave
           fetch-depth: 1
           persist-credentials: false
@@ -219,7 +219,7 @@ jobs:
           test -s "${source_asset}"
           chmod +x "${source_asset}"
           "${source_asset}" --appimage-extract >/dev/null
-          readelf -d squashfs-root/usr/bin/pyrolight | grep -F 'libpyrowave-shared.so.0'
+          readelf -d squashfs-root/usr/bin/pyrolight | grep -F 'libpyrowave-shared.so.1'
           find squashfs-root -type f -name 'libpyrowave-shared.so*' -print -quit | grep -F 'libpyrowave-shared.so'
           test -s squashfs-root/usr/share/licenses/pyrolight/Pyrolight-LICENSE
           test -s squashfs-root/usr/share/licenses/pyrolight/PyroWave-LICENSE

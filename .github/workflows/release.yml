@@ -57,7 +57,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: karsyboy/pyrowave
-          ref: e344479d6c0439e346c788a918ad5645713f7573
+          ref: 689854dd9727fc2239699c386e69355189fbf332
           path: deps/PyroWave
           fetch-depth: 1
           persist-credentials: false
@@ -82,12 +82,9 @@ jobs:
         working-directory: deps/PyroWave
         run: |
           set -euo pipefail
+          # Pins Granite and applies the fork's maintained Granite patches.
           ./checkout_granite.sh
-          for patch in ../../scripts/pyrowave-patches/*.patch; do
-            git apply --check "$patch"
-            git apply "$patch"
-          done
-          test "$(git -C Granite rev-parse HEAD)" = "1b2d1801d2910fb09ebcded2f0bb3a3a781103b5"
+          test "$(git -C Granite rev-parse HEAD)" = "fb178c8080d163419e8d20f10715c61c53c1ec9b"
 
       - name: Build and install PyroWave
         shell: pwsh

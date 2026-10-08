@@ -21,24 +21,22 @@ cd pyrolight
 
 ### PyroWave dependency
 
-PyroWave support requires the patched standalone C API from the pinned
+PyroWave support requires the fork's C API from the pinned
 [`karsyboy/pyrowave`](https://github.com/karsyboy/pyrowave) revision:
 
 | Item | Value |
 | --- | --- |
-| Revision | `e344479d6c0439e346c788a918ad5645713f7573` |
-| C API | `pyrowave-shared` 0.7.0 (checked by `app/app.pro`) |
-| Granite | `1b2d1801d2910fb09ebcded2f0bb3a3a781103b5`, from `checkout_granite.sh` |
-| Patches | `scripts/pyrowave-patches/*.patch`, applied after `checkout_granite.sh` |
+| Revision | `689854dd9727fc2239699c386e69355189fbf332` |
+| C API | `pyrowave-shared` 1.1.0 (checked by `app/app.pro`) |
+| Granite | `fb178c8080d163419e8d20f10715c61c53c1ec9b`, from `checkout_granite.sh` |
 
-Do not substitute upstream PyroWave 0.6 or another ABI. Build and install it
+Do not substitute upstream PyroWave or another ABI. Build and install it
 without the development applications:
 
 ```sh
 git clone https://github.com/karsyboy/pyrowave.git deps/PyroWave
-git -C deps/PyroWave checkout e344479d6c0439e346c788a918ad5645713f7573
+git -C deps/PyroWave checkout 689854dd9727fc2239699c386e69355189fbf332
 (cd deps/PyroWave && ./checkout_granite.sh)
-for patch in scripts/pyrowave-patches/*.patch; do git -C deps/PyroWave apply "$PWD/$patch"; done
 cmake -S deps/PyroWave -B build/pyrowave \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX="$PWD/build/pyrowave-install" \
@@ -47,9 +45,9 @@ cmake --build build/pyrowave --parallel
 cmake --install build/pyrowave
 ```
 
-The patches add full-resolution 4:4:4 payload allocation and 200-nit
-normalization when converting PQ/scRGB into SDR. The release workflows apply
-the same patches. The Pyroshine host pins a newer revision of the same fork; the
+The fork carries full-resolution 4:4:4 payload allocation and 200-nit
+normalization when converting PQ/scRGB into SDR; `checkout_granite.sh` applies
+its Granite patches. The Pyroshine host pins a newer revision of the same fork; the
 two pins need not match, but the client must decode the host's block-format
 family (`186f0393`). See [PyroWave integration](docs/PYROWAVE.md#dependency-and-build-contract)
 before changing the pin.
@@ -61,7 +59,7 @@ SDL2_ttf, OpenSSL, Opus, and the VA-API/VDPAU/X11/Wayland development packages
 for your distribution. With PyroWave installed as above:
 
 ```sh
-export PKG_CONFIG_PATH="$PWD/build/pyrowave-install/share/pkgconfig:$PKG_CONFIG_PATH"
+export PKG_CONFIG_PATH="$PWD/build/pyrowave-install/lib/pkgconfig:$PKG_CONFIG_PATH"
 qmake6 moonlight-qt.pro CONFIG+=enable-pyrowave
 make -j"$(nproc)" release
 ```
@@ -70,7 +68,7 @@ Omit `CONFIG+=enable-pyrowave` to build without PyroWave.
 
 The release AppImage is built in an Ubuntu 22.04 userspace; the complete
 dependency list is in [build-appimage.yml](.github/workflows/build-appimage.yml).
-In that environment, build PyroWave (with patches) and the AppImage with:
+In that environment, build PyroWave and the AppImage with:
 
 ```sh
 PYROWAVE_SOURCE="$PWD/deps/PyroWave" scripts/build-pyrowave-appimage.sh

@@ -118,16 +118,15 @@ live network rate controller.
 
 | Item | Value |
 | --- | --- |
-| Source | [`karsyboy/pyrowave`](https://github.com/karsyboy/pyrowave) at `e344479d6c0439e346c788a918ad5645713f7573` |
-| C API | `pyrowave-shared` 0.7.0; `app/app.pro` rejects other versions |
-| Granite | `1b2d1801d2910fb09ebcded2f0bb3a3a781103b5` via `checkout_granite.sh` |
-| Patches | `scripts/pyrowave-patches/`: 4:4:4 payload allocation; 200-nit SDR normalization of PQ/scRGB |
+| Source | [`karsyboy/pyrowave`](https://github.com/karsyboy/pyrowave) at `689854dd9727fc2239699c386e69355189fbf332` |
+| C API | `pyrowave-shared` 1.1.0; `app/app.pro` rejects other versions |
+| Granite | `fb178c8080d163419e8d20f10715c61c53c1ec9b` via `checkout_granite.sh` |
 | Bitstream family | `186f0393` |
 
 The pin appears in [build-appimage.yml](../.github/workflows/build-appimage.yml),
 [release.yml](../.github/workflows/release.yml) and the build instructions; keep
-them identical. Both workflows and `scripts/build-pyrowave-appimage.sh` apply
-the patches, and the release workflows fail unless the packaged client links and
+them identical. Both workflows and `scripts/build-pyrowave-appimage.sh` run the fork's
+`checkout_granite.sh`, which applies its Granite patches, and the release workflows fail unless the packaged client links and
 bundles the PyroWave runtime and its license.
 
 The Pyroshine host pins a newer revision of the same fork with a different C
