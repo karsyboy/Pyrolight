@@ -167,6 +167,13 @@ private:
 
     int getAudioRendererCapabilities(int audioConfiguration);
 
+    // The display the stream window opens on (the Qt UI's screen), or the
+    // window's display once it exists.
+    int streamDisplayIndex();
+
+    // Qualify VRR presentation for a stream window on `displayIndex`.
+    VRR_PARAMETERS qualifyVrr(int displayIndex, int& fallbackReason) const;
+
     void getWindowDimensions(int& x, int& y,
                              int& width, int& height);
 
@@ -193,7 +200,8 @@ private:
                        SDL_Window* window, int videoFormat, int width, int height,
                        int frameRate, bool enableVsync, bool enableFramePacing,
                        bool testOnly,
-                       IVideoDecoder*& chosenDecoder);
+                       IVideoDecoder*& chosenDecoder,
+                       const VRR_PARAMETERS* vrr = nullptr);
 
     static
     void clStageStarting(int stage);
@@ -250,6 +258,11 @@ private:
 
     StreamingPreferences* m_Preferences;
     bool m_IsFullScreen;
+    // VRR presentation qualification for the stream window's display. When
+    // enabled, the host is asked for presentation-driven capture; when the
+    // request is rejected, m_VrrFallbackReason says why.
+    VRR_PARAMETERS m_Vrr;
+    int m_VrrFallbackReason;
     SupportedVideoFormatList m_SupportedVideoFormats; // Sorted in order of descending priority
     STREAM_CONFIGURATION m_StreamConfig;
     DECODER_RENDERER_CALLBACKS m_VideoCallbacks;

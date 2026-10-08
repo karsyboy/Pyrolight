@@ -222,6 +222,7 @@ NvHTTP::startApp(QString verb,
                  bool localAudio,
                  int gamepadMask,
                  bool persistGameControllersOnDisconnect,
+                 bool clientVrrRequested,
                  QString& rtspSessionUrl)
 {
     int riKeyId;
@@ -251,6 +252,10 @@ NvHTTP::startApp(QString verb,
                                    "&remoteControllersBitmap="+QString::number(gamepadMask)+
                                    "&gcmap="+QString::number(gamepadMask)+
                                    "&gcpersist="+QString::number(persistGameControllersOnDisconnect ? 1 : 0)+
+                                   // The client presents on a VRR display and paces playback from
+                                   // RTP timestamps, so the host may capture frames as they are
+                                   // presented (Pyroshine, Vibepollo). Other hosts ignore it.
+                                   (clientVrrRequested ? "&clientVrrRequested=1" : "")+
                                    LiGetLaunchUrlQueryParameters(),
                                    LAUNCH_TIMEOUT_MS);
 

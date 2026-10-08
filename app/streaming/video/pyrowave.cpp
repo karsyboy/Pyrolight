@@ -1,5 +1,6 @@
 #include "pyrowaveframing.h"
 #include "pyrowave.h"
+#include "ffmpeg-renderers/pacer/vrrdiagnostics.h"
 #include "pyrowavecolor.h"
 #include "pyrowaveframe.h"
 #include <PyroWave.h>
@@ -11,6 +12,17 @@
 
 PyroWaveVideoDecoder::~PyroWaveVideoDecoder()
 {
+    // The VRR worker decodes and presents through the planes and renderer.
+    if (m_VrrWorker) {
+        Vrr::PacingWorker::Stats last = {};
+        char summary[1024];
+        if (Vrr::formatSummary("VRR session summary (PyroWave)", m_VrrWorker->stats(), last, summary, sizeof(summary))) {
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "%s", summary);
+        }
+    }
+    m_VrrWorker.reset();
+    for (EncodedFrame* encoded : m_FreeEncodedFrames) delete encoded;
+    m_FreeEncodedFrames.clear();
     if (m_OverlayAttached) Session::get()->getOverlayManager().setOverlayRenderer(nullptr);
     {
         std::lock_guard<std::mutex> lock(m_Mutex);
@@ -208,14 +220,50 @@ bool PyroWaveVideoDecoder::initialize(PDECODER_PARAMETERS params)
     if (!params->testOnly) {
         Session::get()->getOverlayManager().setOverlayRenderer(m_Renderer.get());
         m_OverlayAttached = true;
-        try {
-            m_Threaded = true;
-            m_RenderThread = std::thread(&PyroWaveVideoDecoder::renderLoop, this);
+        m_VrrRequested = params->vrr.enabled;
+        if (m_VrrRequested) {
+            Vrr::PresentProtection protection = Vrr::PresentProtection::SoftwareFloor;
+            m_VrrFallback = Vrr::FallbackReason::UnsupportedRenderer;
+            if (m_Renderer->getVrrPresenter(&protection, &m_VrrFallback)) {
+                Vrr::SessionConfig config;
+                config.displayRefreshHz = params->vrr.displayRefreshHz;
+                config.streamRateHz = params->frameRate;
+                config.latencyMode = params->vrr.latencyMode;
+                config.timing = params->vrr.timing;
+                config.reduceJudder = params->vrr.reduceJudder;
+                config.protection = protection;
+                m_VrrWorker = std::make_unique<Vrr::PacingWorker>(config, static_cast<Vrr::IFramePresenter*>(this), [] { return LiGetMicroseconds(); });
+                if (m_VrrWorker->start([] {
+                        if (SDL_SetThreadPriority(SDL_THREAD_PRIORITY_TIME_CRITICAL) < 0) {
+                            SDL_SetThreadPriority(SDL_THREAD_PRIORITY_HIGH);
+                        }
+                    })) {
+                    m_VrrFallback = Vrr::FallbackReason::NoFallback;
+                    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                                "PyroWave VRR presentation active: %d FPS stream on a %d Hz display (%s)",
+                                params->frameRate, params->vrr.displayRefreshHz, m_Renderer->getVrrPresentModeName());
+                }
+                else {
+                    m_VrrWorker.reset();
+                    m_VrrFallback = Vrr::FallbackReason::InitializationFailed;
+                }
+            }
+            if (!m_VrrWorker) {
+                SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                            "PyroWave VRR presentation unavailable (%s); presenting on decode",
+                            Vrr::fallbackReasonName(m_VrrFallback));
+            }
         }
-        catch (const std::system_error& error) {
-            m_Threaded = false;
-            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to start PyroWave render thread: %s", error.what());
-            return false;
+        if (!m_VrrWorker) {
+            try {
+                m_Threaded = true;
+                m_RenderThread = std::thread(&PyroWaveVideoDecoder::renderLoop, this);
+            }
+            catch (const std::system_error& error) {
+                m_Threaded = false;
+                SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to start PyroWave render thread: %s", error.what());
+                return false;
+            }
         }
     }
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
@@ -274,7 +322,7 @@ void PyroWaveVideoDecoder::updatePerformanceOverlay(const VIDEO_STATS& stats)
         return;
     }
 
-    char text[1024];
+    char text[2048];
     const char* chroma = m_Format & VIDEO_FORMAT_PYROWAVE_444 ? " 4:4:4" : " 4:2:0";
     const char* dynamicRange = m_Format & VIDEO_FORMAT_PYROWAVE_HDR ? " HDR" : " SDR";
     char rtt[64];
@@ -340,14 +388,50 @@ void PyroWaveVideoDecoder::updatePerformanceOverlay(const VIDEO_STATS& stats)
         used += written;
     }
 
+    if (m_VrrWorker) {
+        used += Vrr::formatOverlay(m_VrrWorker->stats(), m_VrrOverlayLast, m_VrrWorker->config(),
+                                   m_Renderer->getVrrPresentModeName(), text + used, int(sizeof(text)) - used);
+    }
+    else if (m_VrrRequested) {
+        used += Vrr::formatFallback(m_VrrFallback, text + used, int(sizeof(text)) - used);
+    }
+
     overlay.updateOverlayText(Overlay::OverlayDebug, text);
+}
+
+PyroWaveVideoDecoder::EncodedFrame* PyroWaveVideoDecoder::takeEncodedFrame()
+{
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    if (m_FreeEncodedFrames.empty()) {
+        return new EncodedFrame;
+    }
+    EncodedFrame* encoded = m_FreeEncodedFrames.back();
+    m_FreeEncodedFrames.pop_back();
+    return encoded;
 }
 
 int PyroWaveVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
 {
     if (du->fullLength < 8 || du->fullLength > int(PYROWAVE_MAX_FRAME_BYTES)) return DR_OK;
+    // VRR presentation queues the encoded frame in a recycled buffer. Every
+    // early return below recycles it through this guard.
+    struct EncodedHold {
+        PyroWaveVideoDecoder* decoder;
+        EncodedFrame* encoded;
+        std::vector<uint32_t>* frame;
+        ~EncodedHold() {
+            if (encoded) {
+                encoded->data.swap(*frame);
+                decoder->vrrRelease(encoded);
+            }
+        }
+    };
     std::vector<uint32_t> frame;
-    {
+    EncodedHold hold{this, m_VrrWorker ? takeEncodedFrame() : nullptr, &frame};
+    if (hold.encoded) {
+        frame.swap(hold.encoded->data);
+    }
+    else {
         std::lock_guard<std::mutex> lock(m_Mutex);
         frame.swap(m_Spare);
     }
@@ -385,6 +469,38 @@ int PyroWaveVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
         if (!pyroWaveUnpackRecords(data, frameSize, m_Format & VIDEO_FORMAT_PYROWAVE_HDR)) return DR_OK;
     }
     const uint64_t now = LiGetMicroseconds();
+    VIDEO_STATS overlayStats {};
+    bool refreshOverlay = false;
+    uint32_t lostPackets = 0;
+    for (auto entry = du->bufferList; entry; entry = entry->next) {
+        lostPackets += entry->bufferType == BUFFER_TYPE_LOST ? 1 : 0;
+    }
+    if (hold.encoded) {
+        // Frames presented or dropped by the VRR worker since the last window.
+        const Vrr::PacingWorker::Stats vrr = m_VrrWorker->stats();
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_ActiveVideoStats.renderedFrames += uint32_t(vrr.presented - m_VrrAccumulated.presented);
+        m_ActiveVideoStats.pacerDroppedFrames += uint32_t((vrr.queueDrops - m_VrrAccumulated.queueDrops) +
+                                                          (vrr.staleDrops - m_VrrAccumulated.staleDrops) +
+                                                          (vrr.failedPreparations - m_VrrAccumulated.failedPreparations));
+        const uint64_t preparation = vrr.totalPreparationUs - m_VrrAccumulated.totalPreparationUs;
+        const uint64_t queued = vrr.totalArrivalToPresentUs - m_VrrAccumulated.totalArrivalToPresentUs;
+        m_ActiveVideoStats.totalRenderTimeUs += preparation + (vrr.totalPresentCallUs - m_VrrAccumulated.totalPresentCallUs);
+        m_ActiveVideoStats.totalPacerTimeUs += queued > preparation ? queued - preparation : 0;
+        m_VrrAccumulated = vrr;
+    }
+    // A periodic summary in the log, without per-frame logging.
+    if (hold.encoded && !m_VrrLastLogUs) {
+        m_VrrLastLogUs = now;
+    }
+    else if (hold.encoded && now - m_VrrLastLogUs >= 10000000) {
+        char summary[1024];
+        if (Vrr::formatSummary("VRR presentation (PyroWave, last 10 s)", m_VrrWorker->stats(), m_VrrLogLast,
+                               summary, sizeof(summary))) {
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "%s", summary);
+        }
+        m_VrrLastLogUs = now;
+    }
     {
         std::lock_guard<std::mutex> lock(m_Mutex);
         if (m_ActiveVideoStats.measurementStartUs == 0) {
@@ -426,10 +542,38 @@ int PyroWaveVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
         m_ActiveVideoStats.receivedFrames++;
         m_ActiveVideoStats.totalFrames++;
         m_ActiveVideoStats.totalReassemblyTimeUs += du->enqueueTimeUs - du->receiveTimeUs;
-        if (!m_Pending.empty()) {
+        if (hold.encoded) {
+            if (m_OverlayRefreshPending) {
+                overlayStats = m_PendingOverlayStats;
+                m_OverlayRefreshPending = false;
+                refreshOverlay = true;
+            }
+        }
+        else if (!m_Pending.empty()) {
             // The mailbox keeps the newest complete frame to minimize latency.
             m_ActiveVideoStats.pacerDroppedFrames++;
         }
+    }
+    if (hold.encoded) {
+        if (refreshOverlay) updatePerformanceOverlay(overlayStats);
+        Vrr::FrameTiming timing;
+        timing.frameNumber = du->frameNumber;
+        timing.rtpTimestamp = du->rtpTimestamp;
+        timing.timestampValid = true;
+        timing.readyUs = du->enqueueTimeUs ? du->enqueueTimeUs : now;
+        timing.receiveUs = du->receiveTimeUs;
+        timing.lostPackets = lostPackets;
+        EncodedFrame* encoded = hold.encoded;
+        hold.encoded = nullptr;
+        encoded->data.swap(frame);
+        encoded->size = frameSize;
+        encoded->enqueueUs = now;
+        // The worker owns the frame now and releases it when done.
+        m_VrrWorker->submit(timing, encoded);
+        return DR_OK;
+    }
+    {
+        std::lock_guard<std::mutex> lock(m_Mutex);
 
         if (!m_Pending.empty()) {
             m_Pending.swap(frame);
@@ -465,10 +609,10 @@ void PyroWaveVideoDecoder::releasePlanes(uint64_t value)
     }
 }
 
-bool PyroWaveVideoDecoder::decodeFrame(const std::vector<uint32_t>& bytes, size_t size,
-                                       uint64_t* decodeTimeUs, uint64_t* renderTimeUs,
-                                       bool rendererReady)
+bool PyroWaveVideoDecoder::decodeToPlanes(const std::vector<uint32_t>& bytes, size_t size, pl_frame& frame,
+                                          uint64_t* decodeTimeUs)
 {
+
     if (size < 8 || size > PYROWAVE_MAX_FRAME_BYTES || size > bytes.size() * sizeof(uint32_t)) return false;
     // Sequence header metadata is used directly; no assumptions about bit depth.
     const uint32_t b = qFromLittleEndian(bytes[1]);
@@ -509,7 +653,7 @@ bool PyroWaveVideoDecoder::decodeFrame(const std::vector<uint32_t>& bytes, size_
     }
     const auto decodeEnd = LiGetMicroseconds();
     releasePlanes(m_Value);
-    pl_frame frame {};
+    frame = {};
     frame.num_planes = 3;
     frame.crop = {0, 0, float(m_Width), float(m_Height)};
     frame.repr = pyroWaveColorRepresentation(b & (1u << 28), b & (1u << 30), b & (1u << 29));
@@ -538,25 +682,96 @@ bool PyroWaveVideoDecoder::decodeFrame(const std::vector<uint32_t>& bytes, size_
         frame.planes[p].component_mapping[0] = p;
     }
     pl_frame_set_chroma_location(&frame, b >> 31 ? PL_CHROMA_LEFT : PL_CHROMA_CENTER);
-    const auto renderStart = LiGetMicroseconds();
-    if (!rendererReady) m_Renderer->waitToRender();
-    m_Renderer->renderPlaceboFrame(frame);
-    const auto renderEnd = LiGetMicroseconds();
     if (decodeTimeUs) *decodeTimeUs = decodeEnd - decodeStart;
-    if (renderTimeUs) *renderTimeUs = renderEnd - renderStart;
-    if (decodeStart - m_LastStatsTime >= 1000000) {
+    reportGpuStats(decodeStart);
+    return true;
+}
+
+void PyroWaveVideoDecoder::reportGpuStats(uint64_t nowUs)
+{
+    if (nowUs - m_LastStatsTime >= 1000000) {
         pyrowave_device_report_performance_stats(m_Device, collectPerformanceStat, this, true);
-        m_LastStatsTime = decodeStart;
+        m_LastStatsTime = nowUs;
         if ((m_GpuDequantMs > 0.0 || m_GpuIdwtMs > 0.0) &&
-            decodeStart - m_LastGpuStatsLogTime >= 5000000) {
+            nowUs - m_LastGpuStatsLogTime >= 5000000) {
             SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                         "PyroWave GPU decode (%s path): dequant %.2f ms, iDWT %.2f ms",
                         m_FragmentPath ? "fragment" : "compute",
                         m_GpuDequantMs, m_GpuIdwtMs);
-            m_LastGpuStatsLogTime = decodeStart;
+            m_LastGpuStatsLogTime = nowUs;
         }
     }
+}
+
+bool PyroWaveVideoDecoder::decodeFrame(const std::vector<uint32_t>& bytes, size_t size,
+                                       uint64_t* decodeTimeUs, uint64_t* renderTimeUs,
+                                       bool rendererReady)
+{
+    pl_frame frame;
+    if (!decodeToPlanes(bytes, size, frame, decodeTimeUs)) return false;
+    const auto renderStart = LiGetMicroseconds();
+    if (!rendererReady) m_Renderer->waitToRender();
+    m_Renderer->renderPlaceboFrame(frame);
+    const auto renderEnd = LiGetMicroseconds();
+    if (renderTimeUs) *renderTimeUs = renderEnd - renderStart;
     return true;
+}
+
+Vrr::PrepareResult PyroWaveVideoDecoder::vrrPrepare(void* payload, bool)
+{
+    auto* encoded = static_cast<EncodedFrame*>(payload);
+    pl_frame frame;
+    uint64_t decodeTimeUs = 0;
+    if (!decodeToPlanes(encoded->data, encoded->size, frame, &decodeTimeUs)) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Rejected incomplete/invalid PyroWave frame or GPU operation failed");
+        if (pl_gpu_is_failed(m_Renderer->getVulkan()->gpu)) {
+            SDL_Event event {}; event.type = SDL_RENDER_DEVICE_RESET; SDL_PushEvent(&event);
+        }
+        return {};
+    }
+    {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_ActiveVideoStats.decodedFrames++;
+        m_ActiveVideoStats.totalDecodeTimeUs += decodeTimeUs;
+    }
+    // The decoded planes are read by preparation; when the renderer must
+    // render them at present time instead, nothing decodes into them before
+    // that present, since the worker prepares one frame at a time.
+    bool retainsPlanes = false;
+    if (!m_Renderer->vrrPrepareMappedFrame(frame, retainsPlanes)) {
+        return {};
+    }
+    // The encoded bytes are no longer needed.
+    return {true, true};
+}
+
+Vrr::PresentResult PyroWaveVideoDecoder::vrrPresent(bool)
+{
+    return {m_Renderer->vrrPresentPrepared()};
+}
+
+void PyroWaveVideoDecoder::vrrCancel()
+{
+    m_Renderer->vrrDiscardPrepared();
+}
+
+void PyroWaveVideoDecoder::vrrRelease(void* payload)
+{
+    auto* encoded = static_cast<EncodedFrame*>(payload);
+    encoded->size = 0;
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    // A few frames are enough: the worker holds at most Vrr::kOwnedFrames.
+    if (m_FreeEncodedFrames.size() < size_t(Vrr::kOwnedFrames + 2)) {
+        m_FreeEncodedFrames.push_back(encoded);
+    }
+    else {
+        delete encoded;
+    }
+}
+
+void PyroWaveVideoDecoder::vrrThreadStopping()
+{
+    m_Renderer->vrrDiscardPrepared();
 }
 
 void PyroWaveVideoDecoder::recycleFrame(std::vector<uint32_t>& frame)

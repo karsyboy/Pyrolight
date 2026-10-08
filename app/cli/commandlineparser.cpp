@@ -319,6 +319,11 @@ StreamCommandLineParser::StreamCommandLineParser()
         {"software", StreamingPreferences::VDS_FORCE_SOFTWARE},
         {"hardware", StreamingPreferences::VDS_FORCE_HARDWARE},
     };
+    m_VrrTimingMap = {
+        {"smoothest",      StreamingPreferences::VLM_SMOOTHEST},
+        {"balanced",       StreamingPreferences::VLM_BALANCED},
+        {"lowest-latency", StreamingPreferences::VLM_LOWEST_LATENCY},
+    };
     m_CaptureSysKeysModeMap = {
         {"never",      StreamingPreferences::CSK_OFF},
         {"fullscreen", StreamingPreferences::CSK_FULLSCREEN},
@@ -363,6 +368,9 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
     parser.addToggleOption("game-optimization", "game optimizations");
     parser.addToggleOption("audio-on-host", "audio on host PC");
     parser.addToggleOption("frame-pacing", "frame pacing");
+    parser.addToggleOption("vrr", "variable refresh rate presentation (requires V-Sync)");
+    parser.addChoiceOption("vrr-timing", "VRR timing", m_VrrTimingMap.keys());
+    parser.addToggleOption("vrr-reduce-judder", "VRR judder reduction");
     parser.addToggleOption("mute-on-focus-loss", "mute audio when Pyrolight window loses focus");
     parser.addToggleOption("background-gamepad", "background gamepad input");
     parser.addToggleOption("reverse-scroll-direction", "inverted scroll direction");
@@ -472,6 +480,13 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
 
     // Resolve --frame-pacing and --no-frame-pacing options
     preferences->framePacing = parser.getToggleOptionValue("frame-pacing", preferences->framePacing);
+
+    // Resolve --vrr, --vrr-timing and --vrr-reduce-judder options
+    preferences->enableVrr = parser.getToggleOptionValue("vrr", preferences->enableVrr);
+    if (parser.isSet("vrr-timing")) {
+        preferences->applyVrrPreset(mapValue(m_VrrTimingMap, parser.getChoiceOptionValue("vrr-timing")));
+    }
+    preferences->smoothVrrFrameTiming = parser.getToggleOptionValue("vrr-reduce-judder", preferences->smoothVrrFrameTiming);
 
     // Resolve --mute-on-focus-loss and --no-mute-on-focus-loss options
     preferences->muteOnFocusLoss = parser.getToggleOptionValue("mute-on-focus-loss", preferences->muteOnFocusLoss);

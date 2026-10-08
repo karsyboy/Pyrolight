@@ -127,8 +127,10 @@ ctest --test-dir build/tests --output-on-failure
 
 They cover native controller identities, protocol capabilities and normalized paddle press/release, PyroWave color
 mapping, frame validation, record parsing and recovery, bandwidth math,
-Linux display backend selection, and golden bitstreams from both the client and
-host forks. When Qt5, OpenSSL and a
+Linux display backend selection, golden bitstreams from both the client and
+host forks, and VRR presentation (`vrr-timing` simulates the timing controller
+under jitter, stalls, loss, rate changes, RTP wrap and reconnects; `vrr-worker`
+runs the threaded pacing worker against a fake presenter). When Qt5, OpenSSL and a
 built `moonlight-common-c` library are available, the project also builds
 `pyrowave-https`; run its TLS calibration harness with:
 

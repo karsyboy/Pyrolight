@@ -17,6 +17,8 @@ Moonlight's standard codecs and features and adds an explicitly selected
 - H.264, HEVC, and AV1 with any Moonlight-compatible host.
 - PyroWave network calibration and receive-buffer diagnostics.
 - Named streaming profiles for switching between sets of stream settings.
+- [VRR presentation](docs/VRR.md): frames are shown on the host's frame timing,
+  so a VRR display follows the game's frame rate with any host.
 - Native Wayland on Linux, with automatic fallback to X11/XWayland. **Settings →
   Advanced Settings → Display backend** shows which one is in use; see
   [Linux display backends](docs/LINUX_DISPLAY.md).
@@ -84,12 +86,23 @@ PyroWave accepts up to 2,000,000 Kbps and 240 FPS, provided each encoded frame
 budget stays between 1 KiB and 3 MiB. Unsupported host capabilities, devices,
 or frame budgets fail with an error instead of falling back to another codec.
 
+## Variable refresh rate (VRR)
+
+On a VRR display, enable **V-Sync** and **Variable refresh rate (VRR)** in
+Settings, and enable adaptive sync for the display in your compositor (on KDE
+Plasma: **Adaptive sync** set to **Automatic** or **Always**). Pick a **VRR
+timing** mode (**Smoothest**, **Balanced** or **Lowest latency**); the frame
+rate list suggests VRR rates just below the refresh rate, such as 116 FPS at
+120 Hz. VRR currently requires Linux and the Vulkan renderer; when a
+requirement is not met, the performance overlay shows why. See
+[VRR presentation](docs/VRR.md) for details.
+
 ## Streaming profiles
 
 The **Streaming Profile** section of Settings creates, duplicates, renames,
 deletes, and switches between named profiles. A profile stores stream settings
 such as resolution, frame rate, bitrate, codec, HDR, YUV 4:4:4, V-Sync, frame
-pacing, audio configuration, window mode, decoder, and renderer. Input, interface,
+pacing, VRR settings, audio configuration, window mode, decoder, and renderer. Input, interface,
 and language settings stay global. Settings from before profiles existed become
 the **Default** profile.
 
@@ -119,6 +132,7 @@ stream settings, and client and host logs. On Windows, client logs are in
 
 ## Documentation
 
+- [VRR presentation](docs/VRR.md)
 - [PyroWave network tuning and calibration](docs/PYROWAVE_NETWORKING.md)
 - [PyroWave integration architecture](docs/PYROWAVE.md)
 - [Native controller metadata and validation](docs/NATIVE_CONTROLLERS.md)
@@ -137,6 +151,11 @@ changes. Its `moonlight-common-c` submodule points to the
 fork, which carries the PyroWave and controller protocol extensions. The codec
 is the pinned [`karsyboy/pyrowave`](https://github.com/karsyboy/pyrowave) fork
 of [Themaister's PyroWave](https://github.com/Themaister/pyrowave).
+
+VRR presentation is based on [Nonary](https://github.com/Nonary)'s idea and
+reference implementations in [moonlight-qt](https://github.com/Nonary/moonlight-qt)
+([moonlight-stream/moonlight-qt#1956](https://github.com/moonlight-stream/moonlight-qt/pull/1956))
+and [Vibepollo](https://github.com/Nonary/Vibepollo).
 
 Licensed under the [GNU General Public License v3](LICENSE), preserving
 Moonlight's copyright and license notices. PyroWave is distributed under its own

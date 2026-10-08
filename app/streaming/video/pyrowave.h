@@ -27,7 +27,12 @@ static_assert(((2160 + 31) & ~31) == 2176 && pyroWaveVisiblePlaneDimension(2160,
 // GPU operations run on a dedicated render thread. submitDecodeUnit is a
 // non-blocking producer for a single-slot encoded-frame mailbox; newer frames
 // replace it so presentation latency cannot accumulate.
-class PyroWaveVideoDecoder final : public IVideoDecoder {
+//
+// With VRR presentation the VRR pacing worker replaces the mailbox: it queues
+// a bounded number of encoded frames (independent frames, so stale ones are
+// skipped before decoding) and preparation decodes into the planes and renders
+// the presentable image, at the time the frame's target requires.
+class PyroWaveVideoDecoder final : public IVideoDecoder, private Vrr::IFramePresenter {
 public:
     ~PyroWaveVideoDecoder() override;
     bool initialize(PDECODER_PARAMETERS params) override;
@@ -52,6 +57,24 @@ private:
     bool decodeFrame(const std::vector<uint32_t>& bytes, size_t size,
                      uint64_t* decodeTimeUs = nullptr, uint64_t* renderTimeUs = nullptr,
                      bool rendererReady = false);
+    // Decode into m_Planes and describe them as a libplacebo frame.
+    bool decodeToPlanes(const std::vector<uint32_t>& bytes, size_t size, pl_frame& frame,
+                        uint64_t* decodeTimeUs);
+    void reportGpuStats(uint64_t nowUs);
+
+    // VRR presentation (the payload is an EncodedFrame).
+    struct EncodedFrame {
+        std::vector<uint32_t> data;
+        size_t size = 0;
+        uint64_t enqueueUs = 0;
+        bool presented = false;
+    };
+    Vrr::PrepareResult vrrPrepare(void* payload, bool latched) override;
+    Vrr::PresentResult vrrPresent(bool latched) override;
+    void vrrCancel() override;
+    void vrrRelease(void* payload) override;
+    void vrrThreadStopping() override;
+    EncodedFrame* takeEncodedFrame();
     void renderPendingFrame(bool rendererReady);
     void renderLoop();
     void recycleFrame(std::vector<uint32_t>& frame);
@@ -96,4 +119,15 @@ private:
     VIDEO_STATS m_PendingOverlayStats = {};
     bool m_OverlayRefreshPending = false;
     int m_LastFrameNumber = 0;
+
+    std::unique_ptr<Vrr::PacingWorker> m_VrrWorker;
+    bool m_VrrRequested = false;
+    Vrr::FallbackReason m_VrrFallback = Vrr::FallbackReason::NotRequested;
+    // Recycled encoded-frame buffers: no allocation once warmed up.
+    std::vector<EncodedFrame*> m_FreeEncodedFrames;
+    EncodedFrame* m_PreparedFrame = nullptr;
+    Vrr::PacingWorker::Stats m_VrrOverlayLast;
+    Vrr::PacingWorker::Stats m_VrrAccumulated;
+    uint64_t m_VrrLastLogUs = 0;
+    Vrr::PacingWorker::Stats m_VrrLogLast;
 };

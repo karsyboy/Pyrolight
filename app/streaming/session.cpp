@@ -1,6 +1,8 @@
 #include "session.h"
 #include "settings/streamingpreferences.h"
 #include "streaming/streamutils.h"
+#include "streaming/vrrratepolicy.h"
+#include "streaming/video/ffmpeg-renderers/pacer/vrr/vrrtypes.h"
 #include "backend/richpresencemanager.h"
 
 #include <Limelight.h>
@@ -292,9 +294,11 @@ void Session::clSetAdaptiveTriggers(uint16_t controllerNumber, uint8_t eventFlag
 bool Session::chooseDecoder(StreamingPreferences::VideoDecoderSelection vds,
                             StreamingPreferences::RendererSelection renderer,
                             SDL_Window* window, int videoFormat, int width, int height,
-                            int frameRate, bool enableVsync, bool enableFramePacing, bool testOnly, IVideoDecoder*& chosenDecoder)
+                            int frameRate, bool enableVsync, bool enableFramePacing, bool testOnly, IVideoDecoder*& chosenDecoder,
+                            const VRR_PARAMETERS* vrr)
 {
     DECODER_PARAMETERS params;
+    params.vrr = vrr ? *vrr : VRR_PARAMETERS{};
 
     // We should never have vsync enabled for test-mode.
     // It introduces unnecessary delay for renderers that may
@@ -542,6 +546,10 @@ bool Session::populateDecoderProperties(SDL_Window* window)
     // here because this is operating on the real streaming window, and
     // instantiating Metal or AVSBDL renderers can interfere with MoltenVK's
     // attempt to change the window's colorspace, causing washed out colors.
+    // A VRR session renders with the Vulkan renderer; probe that renderer so
+    // the color range requested from the host matches playback.
+    VRR_PARAMETERS probeVrr = {};
+    probeVrr.preferRenderer = m_Vrr.enabled;
     if (!chooseDecoder(m_Preferences->videoDecoderSelection,
                        m_Preferences->rendererSelection,
                        window,
@@ -549,7 +557,7 @@ bool Session::populateDecoderProperties(SDL_Window* window)
                        m_StreamConfig.width,
                        m_StreamConfig.height,
                        m_StreamConfig.fps,
-                       false, false, true, decoder)) {
+                       false, false, true, decoder, &probeVrr)) {
         return false;
     }
 
@@ -592,6 +600,8 @@ bool Session::populateDecoderProperties(SDL_Window* window)
 Session::Session(NvComputer* computer, NvApp& app, StreamingPreferences *preferences)
     : m_Preferences(preferences ? preferences : StreamingPreferences::get()),
       m_IsFullScreen(m_Preferences->windowMode != StreamingPreferences::WM_WINDOWED || !WMUtils::isRunningDesktopEnvironment()),
+      m_Vrr(),
+      m_VrrFallbackReason(int(Vrr::FallbackReason::NotRequested)),
       m_Computer(computer),
       m_App(app),
       m_Window(nullptr),
@@ -708,6 +718,15 @@ bool Session::initialize(QQuickWindow* qtWindow)
 
     m_StreamConfig.fps = m_Preferences->fps;
     m_StreamConfig.bitrate = m_Preferences->bitrateKbps;
+
+    m_Vrr = qualifyVrr(streamDisplayIndex(), m_VrrFallbackReason);
+    if (m_Vrr.enabled && !m_IsFullScreen && WMUtils::isRunningDesktopEnvironment()) {
+        // Compositors vary refresh only for fullscreen content. Keep the
+        // saved window mode; this session uses desktop fullscreen.
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                    "VRR: using desktop fullscreen instead of windowed mode");
+        m_IsFullScreen = true;
+    }
 
 #ifndef STEAM_LINK
     // Opt-in to all encryption features if we detect that the platform
@@ -926,7 +945,8 @@ bool Session::initialize(QQuickWindow* qtWindow)
         m_SupportedVideoFormats.deprioritizeByMask(~VIDEO_FORMAT_MASK_10BIT);
     }
 
-    switch (m_Preferences->windowMode)
+    switch (m_Vrr.enabled && m_Preferences->windowMode == StreamingPreferences::WM_WINDOWED ?
+                StreamingPreferences::WM_FULLSCREEN_DESKTOP : m_Preferences->windowMode)
     {
     default:
         // Normally we'd default to fullscreen desktop when starting in windowed
@@ -1372,8 +1392,7 @@ private:
     Session* m_Session;
 };
 
-void Session::getWindowDimensions(int& x, int& y,
-                                  int& width, int& height)
+int Session::streamDisplayIndex()
 {
     int displayIndex = 0;
 
@@ -1419,6 +1438,60 @@ void Session::getWindowDimensions(int& x, int& y,
             }
         }
     }
+
+    return displayIndex;
+}
+
+VRR_PARAMETERS Session::qualifyVrr(int displayIndex, int& fallbackReason) const
+{
+    VRR_PARAMETERS vrr = {};
+    Vrr::FallbackReason reason = Vrr::FallbackReason::NoFallback;
+    const int refreshHz = StreamUtils::getDisplayRefreshRateStrict(displayIndex);
+    if (!m_Preferences->enableVrr) {
+        reason = Vrr::FallbackReason::NotRequested;
+    }
+    else if (!m_Preferences->enableVsync) {
+        reason = Vrr::FallbackReason::VsyncDisabled;
+    }
+    else if (refreshHz <= 0) {
+        reason = Vrr::FallbackReason::UnknownRefresh;
+    }
+    else if (!VrrRatePolicy::hasAdaptiveHeadroom(m_StreamConfig.fps, refreshHz)) {
+        reason = Vrr::FallbackReason::StreamAboveRefresh;
+    }
+    else {
+#if defined(HAVE_LIBPLACEBO_VULKAN) && !defined(Q_OS_WIN32) && !defined(Q_OS_DARWIN)
+        vrr.enabled = true;
+        vrr.preferRenderer = true;
+        vrr.displayRefreshHz = refreshHz;
+        vrr.latencyMode = m_Preferences->vrrLatencyMode;
+        vrr.timing = m_Preferences->vrrTimingOptions().resolved(m_Preferences->vrrLatencyMode);
+        vrr.reduceJudder = m_Preferences->smoothVrrFrameTiming;
+#else
+        // VRR presentation is implemented for the Vulkan renderer on Linux.
+        reason = Vrr::FallbackReason::UnsupportedPlatform;
+#endif
+    }
+    fallbackReason = int(reason);
+    if (m_Preferences->enableVrr) {
+        if (vrr.enabled) {
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                        "VRR: qualified (%d FPS stream on a %d Hz display, timing mode %d, reduce judder %s)",
+                        m_StreamConfig.fps, refreshHz, vrr.latencyMode, vrr.reduceJudder ? "on" : "off");
+        }
+        else {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                        "VRR: requested but not used (%s; display %d, %d Hz, %d FPS stream)",
+                        Vrr::fallbackReasonName(reason), displayIndex, refreshHz, m_StreamConfig.fps);
+        }
+    }
+    return vrr;
+}
+
+void Session::getWindowDimensions(int& x, int& y,
+                                  int& width, int& height)
+{
+    const int displayIndex = streamDisplayIndex();
 
     SDL_Rect usableBounds;
     if (SDL_GetDisplayUsableBounds(displayIndex, &usableBounds) == 0) {
@@ -1675,6 +1748,7 @@ bool Session::startConnectionAsync()
                       m_Preferences->playAudioOnHost,
                       m_InputHandler->getAttachedGamepadMask(),
                       !m_Preferences->multiController,
+                      m_Vrr.enabled,
                       rtspSessionUrl);
     } catch (const GfeHttpResponseException& e) {
         emit displayLaunchError(tr("Host returned error: %1").arg(e.toQString()));
@@ -2278,16 +2352,26 @@ void Session::exec()
                     enableVsync = false;
                 }
 
+                // Requalify VRR for the window's current display: a renderer
+                // recreated after a display change must not keep the old
+                // display's refresh rate.
+                VRR_PARAMETERS vrr = {};
+                if (m_Vrr.enabled) {
+                    vrr = qualifyVrr(SDL_GetWindowDisplayIndex(m_Window), m_VrrFallbackReason);
+                }
+
                 // Choose a new decoder (hopefully the same one, but possibly
-                // not if a GPU was removed or something).
+                // not if a GPU was removed or something). A VRR request that
+                // cannot be honored still gets fixed pacing.
                 if (!chooseDecoder(m_Preferences->videoDecoderSelection,
                                    m_Preferences->rendererSelection,
                                    m_Window, m_ActiveVideoFormat, m_ActiveVideoWidth,
                                    m_ActiveVideoHeight, m_ActiveVideoFrameRate,
                                    enableVsync,
-                                   enableVsync && m_Preferences->framePacing,
+                                   enableVsync && (m_Preferences->framePacing || m_Preferences->enableVrr),
                                    false,
-                                   s_ActiveSession->m_VideoDecoder)) {
+                                   s_ActiveSession->m_VideoDecoder,
+                                   &vrr)) {
                     SDL_UnlockMutex(m_DecoderLock);
                     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
                                  "Failed to recreate decoder after reset");

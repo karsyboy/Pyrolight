@@ -131,6 +131,12 @@ private:
 
 #endif
 
+namespace Vrr {
+class IFramePresenter;
+enum class PresentProtection : uint8_t;
+enum class FallbackReason : uint8_t;
+}
+
 #define RENDERER_ATTRIBUTE_FULLSCREEN_ONLY 0x01
 #define RENDERER_ATTRIBUTE_1080P_MAX 0x02
 #define RENDERER_ATTRIBUTE_HDR_SUPPORT 0x04
@@ -299,6 +305,21 @@ public:
     virtual bool notifyWindowChanged(PWINDOW_STATE_CHANGE_INFO) {
         // Assume the renderer cannot handle window state changes
         return false;
+    }
+
+    // The renderer's VRR presenter when it was initialized for VRR
+    // presentation (DECODER_PARAMETERS::vrr.enabled) and can present
+    // adaptively; otherwise nullptr and the reason.
+    virtual Vrr::IFramePresenter* getVrrPresenter(Vrr::PresentProtection* protection,
+                                                  Vrr::FallbackReason* reason) {
+        (void)protection;
+        (void)reason;
+        return nullptr;
+    }
+
+    // Short description of the VRR presentation mode for diagnostics.
+    virtual const char* getVrrPresentModeName() {
+        return "none";
     }
 
     virtual void prepareToRender() {

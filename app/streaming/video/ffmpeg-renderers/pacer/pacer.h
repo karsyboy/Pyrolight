@@ -2,6 +2,9 @@
 
 #include "../../decoder.h"
 #include "../renderer.h"
+#include "vrrpacingworker.h"
+
+#include <memory>
 
 #include <QQueue>
 #include <QMutex>
@@ -11,7 +14,10 @@
 // - 3 frames in the pacing queue
 // - 1 frame removed from the render queue in the process of rendering
 // - 1 frame for deferred free
+// The VRR worker holds at most Vrr::kOwnedFrames (4 waiting + 1 presenting).
 #define PACER_MAX_OUTSTANDING_FRAMES (3 + 1 + 1)
+static_assert(Vrr::kOwnedFrames <= PACER_MAX_OUTSTANDING_FRAMES,
+              "decoder surface pools reserve PACER_MAX_OUTSTANDING_FRAMES for the pacer");
 
 class IVsyncSource {
 public:
@@ -35,9 +41,27 @@ public:
 
     ~Pacer();
 
-    void submitFrame(AVFrame* frame);
+    // `timing` is required for VRR presentation; legacy pacing ignores it.
+    void submitFrame(AVFrame* frame, const Vrr::FrameTiming* timing = nullptr);
 
-    bool initialize(SDL_Window* window, int maxVideoFps, bool enablePacing);
+    // With `vrr` enabled and a renderer that can present adaptively, frames
+    // are paced by the VRR worker; otherwise by the classic V-Sync pacer
+    // (forced on when VRR was requested, so presentation stays synchronized).
+    bool initialize(SDL_Window* window, int maxVideoFps, bool enablePacing,
+                    const VRR_PARAMETERS* vrr = nullptr);
+
+    bool vrrActive() const { return m_VrrWorker != nullptr; }
+    bool vrrRequested() const { return m_VrrRequested; }
+    Vrr::FallbackReason vrrFallbackReason() const { return m_VrrFallback; }
+    const char* vrrPresentModeName() { return m_VsyncRenderer->getVrrPresentModeName(); }
+    Vrr::PacingWorker::Stats vrrStats() const;
+    // Add the VRR worker's presented/dropped frames and timing since the last
+    // call to the decoder's video statistics window.
+    void accumulateVrrStats();
+    // Append VRR state and quality since the previous call to `output`.
+    // Returns the number of characters written.
+    int formatVrrStats(char* output, int length);
+    void logVrrSummary(const char* title, Vrr::PacingWorker::Stats& last);
 
     void signalVsync();
 
@@ -75,4 +99,12 @@ private:
     int m_DisplayFps;
     PVIDEO_STATS m_VideoStats;
     int m_RendererAttributes;
+
+    std::unique_ptr<Vrr::PacingWorker> m_VrrWorker;
+    bool m_VrrRequested = false;
+    Vrr::FallbackReason m_VrrFallback = Vrr::FallbackReason::NotRequested;
+    Vrr::PacingWorker::Stats m_VrrAccumulated;
+    Vrr::PacingWorker::Stats m_VrrOverlayLast;
+    Vrr::PacingWorker::Stats m_VrrLogLast;
+    uint64_t m_VrrLastLogUs = 0;
 };

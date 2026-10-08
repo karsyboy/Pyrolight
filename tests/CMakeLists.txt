@@ -66,3 +66,23 @@ target_compile_features(pyrowave-golden PRIVATE cxx_std_17)
 target_include_directories(pyrowave-golden PRIVATE ../app)
 target_compile_options(pyrowave-golden PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG> $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG>)
 add_test(NAME pyrowave-golden COMMAND pyrowave-golden ${CMAKE_CURRENT_SOURCE_DIR}/fixtures)
+
+add_executable(vrr-timing vrr_timing.cpp
+    ../app/streaming/vrrratepolicy.cpp
+    ../app/streaming/video/ffmpeg-renderers/pacer/vrr/vrrsourceclock.cpp
+    ../app/streaming/video/ffmpeg-renderers/pacer/vrr/vrrtimingcontroller.cpp)
+target_compile_features(vrr-timing PRIVATE cxx_std_17)
+target_include_directories(vrr-timing PRIVATE ../app)
+target_compile_options(vrr-timing PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG> $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG -Wall -Wextra>)
+add_test(NAME vrr-timing COMMAND vrr-timing)
+
+find_package(Threads REQUIRED)
+add_executable(vrr-worker vrr_worker.cpp
+    ../app/streaming/video/ffmpeg-renderers/pacer/vrrpacingworker.cpp
+    ../app/streaming/video/ffmpeg-renderers/pacer/vrr/vrrsourceclock.cpp
+    ../app/streaming/video/ffmpeg-renderers/pacer/vrr/vrrtimingcontroller.cpp)
+target_compile_features(vrr-worker PRIVATE cxx_std_17)
+target_include_directories(vrr-worker PRIVATE ../app)
+target_link_libraries(vrr-worker PRIVATE Threads::Threads)
+target_compile_options(vrr-worker PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG> $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG -Wall -Wextra>)
+add_test(NAME vrr-worker COMMAND vrr-worker)

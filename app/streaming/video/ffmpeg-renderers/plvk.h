@@ -1,6 +1,7 @@
 #pragma once
 
 #include "renderer.h"
+#include "pacer/vrrpacingworker.h"
 
 #ifdef Q_OS_WIN32
 #define VK_USE_PLATFORM_WIN32_KHR
@@ -35,7 +36,7 @@ private:
 
 #endif
 
-class PlVkRenderer : public IFFmpegRenderer {
+class PlVkRenderer : public IFFmpegRenderer, public Vrr::IFramePresenter {
 public:
     PlVkRenderer(AVHWDeviceType hwDeviceType = AV_HWDEVICE_TYPE_NONE, IFFmpegRenderer *backendRenderer = nullptr);
     virtual ~PlVkRenderer() override;
@@ -59,6 +60,29 @@ public:
     pl_vk_inst getVulkanInstance() const { return m_PlVkInstance; }
     void renderPlaceboFrame(pl_frame& mappedFrame);
 
+    // VRR presentation (Linux). The swapchain uses an adaptive present mode
+    // chosen at initialization: Mailbox (synchronized, never tears) on
+    // Wayland, Immediate elsewhere. Preparation renders into a renderer-owned
+    // texture and waits for its GPU completion, so the source can be released
+    // and the swapchain image is only acquired, blitted and presented at the
+    // target: holding an acquired image across the wait lets the next frame's
+    // GPU work delay its flip.
+    Vrr::IFramePresenter* getVrrPresenter(Vrr::PresentProtection* protection,
+                                          Vrr::FallbackReason* reason) override;
+    const char* getVrrPresentModeName() override;
+    Vrr::PrepareResult vrrPrepare(void* payload, bool latched) override;
+    Vrr::PresentResult vrrPresent(bool latched) override;
+    void vrrCancel() override;
+    void vrrRelease(void* payload) override;
+    void vrrThreadStopping() override;
+    // Shared with the PyroWave decoder: prepare a mapped frame. Returns false
+    // on failure. When `retainsSource` is set on return, the frame could not
+    // be pre-rendered (no swapchain colorimetry yet) and is rendered directly
+    // at present time, so its source must stay valid until then.
+    bool vrrPrepareMappedFrame(pl_frame& mappedFrame, bool& retainsSource);
+    bool vrrPresentPrepared();
+    void vrrDiscardPrepared();
+
 private:
     static void lockQueue(AVHWDeviceContext *dev_ctx, uint32_t queue_family, uint32_t index);
     static void unlockQueue(AVHWDeviceContext *dev_ctx, uint32_t queue_family, uint32_t index);
@@ -66,6 +90,10 @@ private:
 
     void beginRenderTiming();
     void endRenderTiming();
+    // Render a mapped frame and overlays into `target`, scaled with aspect ratio.
+    void drawFrame(pl_frame& mappedFrame, pl_frame& targetFrame);
+    bool chooseVrrPresentMode();
+    bool applyColorspaceHint(const pl_color_space& color);
 
     bool createSwapchain(int depth);
     bool createOverlay(pl_overlay* overlay, SDL_Surface* surface);
@@ -119,6 +147,27 @@ private:
     // Pending swapchain state shared between waitToRender(), renderFrame(), and cleanupRenderContext()
     pl_swapchain_frame m_SwapchainFrame = {};
     bool m_HasPendingSwapchainFrame = false;
+
+    // VRR presentation state, used only by the pacing worker thread.
+    bool m_VrrEnabled = false;
+    Vrr::PresentProtection m_VrrProtection = Vrr::PresentProtection::SoftwareFloor;
+    Vrr::FallbackReason m_VrrFallback = Vrr::FallbackReason::NotRequested;
+    // The renderer-owned image prepared for the next present.
+    pl_tex m_VrrTarget = nullptr;
+    bool m_VrrPrepared = false;
+    // Colorimetry and size of the last swapchain image, used to pre-render
+    // into m_VrrTarget. Invalid until the first present or after a
+    // colorspace change, when frames are rendered at present time instead.
+    bool m_VrrSwapchainKnown = false;
+    pl_color_space m_VrrColor = {};
+    pl_color_repr m_VrrRepr = {};
+    pl_fmt m_VrrFormat = nullptr;
+    int m_VrrWidth = 0;
+    int m_VrrHeight = 0;
+    // A source retained for rendering at present time.
+    bool m_VrrDirect = false;
+    pl_frame m_VrrDirectFrame = {};
+    AVFrame* m_VrrDirectAvFrame = nullptr;
 
     // Overlay state
     SDL_SpinLock m_OverlayLock = 0;

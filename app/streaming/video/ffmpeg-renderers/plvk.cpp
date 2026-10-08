@@ -174,6 +174,8 @@ PlVkRenderer::~PlVkRenderer()
         for (int i = 0; i < (int)SDL_arraysize(m_Textures); i++) {
             pl_tex_destroy(m_Vulkan->gpu, &m_Textures[i]);
         }
+
+        pl_tex_destroy(m_Vulkan->gpu, &m_VrrTarget);
     }
 
     {
@@ -531,7 +533,16 @@ bool PlVkRenderer::initialize(PDECODER_PARAMETERS params)
         return false;
     }
 
-    if (params->enableVsync) {
+    if (params->vrr.enabled && params->enableVsync && !params->testOnly) {
+        // FIFO would hold every present for the next fixed refresh; VRR needs
+        // a mode that flips when the frame is submitted.
+        m_VrrEnabled = chooseVrrPresentMode();
+        if (!m_VrrEnabled) {
+            m_VrrFallback = Vrr::FallbackReason::NoAdaptivePresentMode;
+            m_VkPresentMode = VK_PRESENT_MODE_FIFO_KHR;
+        }
+    }
+    else if (params->enableVsync) {
         // FIFO mode improves frame pacing compared with Mailbox, especially for
         // platforms like X11 that lack a VSyncSource implementation for Pacer.
         m_VkPresentMode = VK_PRESENT_MODE_FIFO_KHR;
@@ -1012,38 +1023,37 @@ void PlVkRenderer::renderFrame(AVFrame *frame)
     unmapAvFrameFromPlacebo(frame, &mappedFrame);
 }
 
-void PlVkRenderer::renderPlaceboFrame(pl_frame& mappedFrame)
+bool PlVkRenderer::applyColorspaceHint(const pl_color_space& color)
 {
-    pl_frame targetFrame;
-    if (!m_HasPendingSwapchainFrame) return;
-
     // Adjust the swapchain if the colorspace of incoming frames has changed
-    if (!pl_color_space_equal(&mappedFrame.color, &m_LastColorspace)) {
-        m_LastColorspace = mappedFrame.color;
-        SDL_assert(pl_color_space_equal(&mappedFrame.color, &m_LastColorspace));
+    if (pl_color_space_equal(&color, &m_LastColorspace)) {
+        return false;
+    }
+    m_LastColorspace = color;
 
 #ifdef Q_OS_DARWIN
-        // There is a gamma mismatch on macOS between what libplacebo thinks BT.709
-        // should use and what the Metal layer actually displays. Use sRGB for the
-        // swapchain when the incoming frames are BT.709 as a workaround.
-        if (pl_color_space_equal(&mappedFrame.color, &pl_color_space_bt709)) {
-            pl_swapchain_colorspace_hint(m_Swapchain, &pl_color_space_srgb);
-        }
-        else
-#endif
-        {
-            pl_swapchain_colorspace_hint(m_Swapchain, &mappedFrame.color);
-        }
+    // There is a gamma mismatch on macOS between what libplacebo thinks BT.709
+    // should use and what the Metal layer actually displays. Use sRGB for the
+    // swapchain when the incoming frames are BT.709 as a workaround.
+    if (pl_color_space_equal(&color, &pl_color_space_bt709)) {
+        pl_swapchain_colorspace_hint(m_Swapchain, &pl_color_space_srgb);
     }
+    else
+#endif
+    {
+        pl_swapchain_colorspace_hint(m_Swapchain, &color);
+    }
+    return true;
+}
 
+void PlVkRenderer::drawFrame(pl_frame& mappedFrame, pl_frame& targetFrame)
+{
     // Reserve enough space to avoid allocating under the overlay lock
     pl_overlay_part overlayParts[Overlay::OverlayMax] = {};
-    std::vector<pl_tex> texturesToDestroy;
-    std::vector<pl_overlay> overlays;
-    texturesToDestroy.reserve(Overlay::OverlayMax);
-    overlays.reserve(Overlay::OverlayMax);
-
-    pl_frame_from_swapchain(&targetFrame, &m_SwapchainFrame);
+    pl_tex texturesToDestroy[2 * Overlay::OverlayMax] = {};
+    int texturesToDestroyCount = 0;
+    pl_overlay overlays[Overlay::OverlayMax] = {};
+    int overlayCount = 0;
 
     // We perform minimal processing under the overlay lock to avoid blocking threads updating the overlay
     SDL_AtomicLock(&m_OverlayLock);
@@ -1051,7 +1061,7 @@ void PlVkRenderer::renderPlaceboFrame(pl_frame& mappedFrame)
         // If we have a staging overlay, we need to transfer ownership to us
         if (m_Overlays[i].hasStagingOverlay) {
             if (m_Overlays[i].hasOverlay) {
-                texturesToDestroy.push_back(m_Overlays[i].overlay.tex);
+                texturesToDestroy[texturesToDestroyCount++] = m_Overlays[i].overlay.tex;
             }
 
             // Copy the overlay fields from the staging area
@@ -1065,7 +1075,7 @@ void PlVkRenderer::renderPlaceboFrame(pl_frame& mappedFrame)
 
         // If we have an overlay but it's been disabled, free the overlay texture
         if (m_Overlays[i].hasOverlay && !Session::get()->getOverlayManager().isOverlayEnabled((Overlay::OverlayType)i)) {
-            texturesToDestroy.push_back(m_Overlays[i].overlay.tex);
+            texturesToDestroy[texturesToDestroyCount++] = m_Overlays[i].overlay.tex;
             SDL_zero(m_Overlays[i].overlay);
             m_Overlays[i].hasOverlay = false;
         }
@@ -1090,7 +1100,7 @@ void PlVkRenderer::renderPlaceboFrame(pl_frame& mappedFrame)
             m_Overlays[i].overlay.parts = &overlayParts[i];
             m_Overlays[i].overlay.num_parts = 1;
 
-            overlays.push_back(m_Overlays[i].overlay);
+            overlays[overlayCount++] = m_Overlays[i].overlay;
         }
     }
     SDL_AtomicUnlock(&m_OverlayLock);
@@ -1115,19 +1125,35 @@ void PlVkRenderer::renderPlaceboFrame(pl_frame& mappedFrame)
     targetFrame.crop.x1 = dst.x + dst.w;
     targetFrame.crop.y1 = dst.y + dst.h;
 
+    // Render the video image and overlays
+    targetFrame.num_overlays = overlayCount;
+    targetFrame.overlays = overlays;
+    if (!pl_render_image(m_Renderer, &mappedFrame, &targetFrame, &pl_render_fast_params)) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "pl_render_image() failed");
+    }
+
+    // libplacebo keeps textures referenced by recorded GPU work alive
+    for (int i = 0; i < texturesToDestroyCount; i++) {
+        pl_tex_destroy(m_Vulkan->gpu, &texturesToDestroy[i]);
+    }
+}
+
+void PlVkRenderer::renderPlaceboFrame(pl_frame& mappedFrame)
+{
+    pl_frame targetFrame;
+    if (!m_HasPendingSwapchainFrame) return;
+
+    applyColorspaceHint(mappedFrame.color);
+    pl_frame_from_swapchain(&targetFrame, &m_SwapchainFrame);
+
 #ifndef PLVK_USE_EARLY_RENDER_TO_WAIT
     // For PLVK_USE_EARLY_RENDER_TO_WAIT, we already timed our early render in waitToRender()
     beginRenderTiming();
 #endif
 
-    // Render the video image and overlays into the swapchain buffer
-    targetFrame.num_overlays = (int)overlays.size();
-    targetFrame.overlays = overlays.data();
-    if (!pl_render_image(m_Renderer, &mappedFrame, &targetFrame, &pl_render_fast_params)) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-                     "pl_render_image() failed");
-        // NB: We must fallthrough to call pl_swapchain_submit_frame()
-    }
+    // NB: Rendering failures must fall through to pl_swapchain_submit_frame()
+    drawFrame(mappedFrame, targetFrame);
 
     // Submit the frame for display and swap buffers
     m_HasPendingSwapchainFrame = false;
@@ -1139,7 +1165,7 @@ void PlVkRenderer::renderPlaceboFrame(pl_frame& mappedFrame)
         SDL_Event event;
         event.type = SDL_RENDER_DEVICE_RESET;
         SDL_PushEvent(&event);
-        goto UnmapExit;
+        return;
     }
 
 #ifndef PLVK_USE_EARLY_RENDER_TO_WAIT
@@ -1155,7 +1181,7 @@ void PlVkRenderer::renderPlaceboFrame(pl_frame& mappedFrame)
             SDL_Event event;
             event.type = SDL_RENDER_DEVICE_RESET;
             SDL_PushEvent(&event);
-            goto UnmapExit;
+            return;
         }
 
         // Restore the swapchain's colorspace from the previous swapchain frame
@@ -1168,13 +1194,270 @@ void PlVkRenderer::renderPlaceboFrame(pl_frame& mappedFrame)
     // to avoid some performance problems on Nvidia GPUs.
     pl_swapchain_swap_buffers(m_Swapchain);
 #endif
+}
 
-UnmapExit:
-    // Delete any textures that need to be destroyed
-    for (pl_tex& texture : texturesToDestroy) {
-        pl_tex_destroy(m_Vulkan->gpu, &texture);
+bool PlVkRenderer::chooseVrrPresentMode()
+{
+    const char* driver = SDL_GetCurrentVideoDriver();
+    const bool wayland = driver != nullptr && strcmp(driver, "wayland") == 0;
+    const bool gamescope = qEnvironmentVariableIsSet("GAMESCOPE_WAYLAND_DISPLAY") ||
+                           qgetenv("XDG_CURRENT_DESKTOP").toLower().contains("gamescope");
+
+    // Wayland compositors flip a Mailbox image as soon as the panel allows
+    // and never tear, so it needs no software spacing floor. X11, KMSDRM and
+    // Gamescope show Immediate presents as adaptive flips; those can tear, so
+    // the pacing controller spaces them by a display period in software.
+    // Gamescope implements its own commit timing for Mailbox requests.
+    const VkPresentModeKHR preferred[] = {
+        wayland && !gamescope ? VK_PRESENT_MODE_MAILBOX_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR,
+        wayland && !gamescope ? VK_PRESENT_MODE_IMMEDIATE_KHR : VK_PRESENT_MODE_MAILBOX_KHR,
+    };
+    for (VkPresentModeKHR mode : preferred) {
+        if (isPresentModeSupportedByPhysicalDevice(m_Vulkan->phys_device, mode)) {
+            m_VkPresentMode = mode;
+            m_VrrProtection = mode == VK_PRESENT_MODE_MAILBOX_KHR ?
+                Vrr::PresentProtection::Native : Vrr::PresentProtection::SoftwareFloor;
+            m_VrrFallback = Vrr::FallbackReason::NoFallback;
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                        "VRR: using %s present mode (%s%s)",
+                        mode == VK_PRESENT_MODE_MAILBOX_KHR ? "Mailbox" : "Immediate",
+                        driver ? driver : "unknown",
+                        gamescope ? ", Gamescope" : "");
+            return true;
+        }
+    }
+    SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                "VRR: the surface supports neither Mailbox nor Immediate presentation");
+    return false;
+}
+
+Vrr::IFramePresenter* PlVkRenderer::getVrrPresenter(Vrr::PresentProtection* protection,
+                                                    Vrr::FallbackReason* reason)
+{
+    if (!m_VrrEnabled) {
+        if (reason) {
+            *reason = m_VrrFallback == Vrr::FallbackReason::NotRequested ?
+                Vrr::FallbackReason::UnsupportedRenderer : m_VrrFallback;
+        }
+        return nullptr;
+    }
+    if (protection) {
+        *protection = m_VrrProtection;
+    }
+    if (reason) {
+        *reason = Vrr::FallbackReason::NoFallback;
+    }
+    return this;
+}
+
+const char* PlVkRenderer::getVrrPresentModeName()
+{
+    if (!m_VrrEnabled) {
+        return "none";
+    }
+    return m_VkPresentMode == VK_PRESENT_MODE_MAILBOX_KHR ? "Vulkan Mailbox" : "Vulkan Immediate";
+}
+
+bool PlVkRenderer::vrrPrepareMappedFrame(pl_frame& mappedFrame, bool& retainsSource)
+{
+    retainsSource = false;
+    m_VrrPrepared = false;
+    if (pl_gpu_is_failed(m_Vulkan->gpu)) {
+        SDL_Event event;
+        event.type = SDL_RENDER_DEVICE_RESET;
+        SDL_PushEvent(&event);
+        return false;
     }
 
+    // A new colorspace can change the swapchain's format and colorimetry:
+    // render this frame at present time against the actual image.
+    if (applyColorspaceHint(mappedFrame.color)) {
+        m_VrrSwapchainKnown = false;
+    }
+    if (!m_VrrSwapchainKnown) {
+        m_VrrDirect = true;
+        retainsSource = true;
+        return true;
+    }
+
+    pl_tex_params params = {};
+    params.w = m_VrrWidth;
+    params.h = m_VrrHeight;
+    params.format = m_VrrFormat;
+    params.renderable = true;
+    params.sampleable = true;
+    params.blit_src = !!(m_VrrFormat->caps & PL_FMT_CAP_BLITTABLE);
+    params.debug_tag = PL_DEBUG_TAG;
+    if (!pl_tex_recreate(m_Vulkan->gpu, &m_VrrTarget, &params)) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "VRR: pl_tex_recreate() failed for the prepared image");
+        m_VrrDirect = true;
+        retainsSource = true;
+        return true;
+    }
+
+    pl_swapchain_frame prepared = {};
+    prepared.fbo = m_VrrTarget;
+    prepared.color_space = m_VrrColor;
+    prepared.color_repr = m_VrrRepr;
+    pl_frame targetFrame;
+    pl_frame_from_swapchain(&targetFrame, &prepared);
+    drawFrame(mappedFrame, targetFrame);
+    pl_gpu_flush(m_Vulkan->gpu);
+
+    // Observe GPU completion within a bound: the source (a decoder surface or
+    // the PyroWave planes) is then free for reuse, and the measured
+    // preparation time teaches the controller how early to start.
+    const uint64_t waitStart = LiGetMicroseconds();
+    while (pl_tex_poll(m_Vulkan->gpu, m_VrrTarget, 1000000)) {
+        if (LiGetMicroseconds() - waitStart > 50000 || pl_gpu_is_failed(m_Vulkan->gpu)) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                         "VRR: prepared image did not complete within 50 ms");
+            SDL_Event event;
+            event.type = SDL_RENDER_DEVICE_RESET;
+            SDL_PushEvent(&event);
+            return false;
+        }
+    }
+    m_VrrPrepared = true;
+    return true;
+}
+
+bool PlVkRenderer::vrrPresentPrepared()
+{
+    if (!m_VrrPrepared && !m_VrrDirect) {
+        return false;
+    }
+
+    int drawableWidth, drawableHeight;
+    SDL_Vulkan_GetDrawableSize(m_Window, &drawableWidth, &drawableHeight);
+    pl_swapchain_frame swapchainFrame;
+    if (!pl_swapchain_resize(m_Swapchain, &drawableWidth, &drawableHeight) ||
+        !pl_swapchain_start_frame(m_Swapchain, &swapchainFrame)) {
+        // Swapchain (re)creation fails while the window is occluded.
+        vrrDiscardPrepared();
+        return false;
+    }
+
+    const pl_color_space preparedColor = m_VrrColor;
+    const pl_color_repr preparedRepr = m_VrrRepr;
+    m_VrrColor = swapchainFrame.color_space;
+    m_VrrRepr = swapchainFrame.color_repr;
+    m_VrrFormat = swapchainFrame.fbo->params.format;
+    m_VrrWidth = swapchainFrame.fbo->params.w;
+    m_VrrHeight = swapchainFrame.fbo->params.h;
+    m_VrrSwapchainKnown = m_VrrFormat != nullptr && (m_VrrFormat->caps & PL_FMT_CAP_RENDERABLE) &&
+                          (m_VrrFormat->caps & PL_FMT_CAP_SAMPLEABLE);
+
+    pl_frame targetFrame;
+    pl_frame_from_swapchain(&targetFrame, &swapchainFrame);
+    if (m_VrrDirect) {
+        drawFrame(m_VrrDirectFrame, targetFrame);
+    }
+    else if (m_VrrTarget->params.blit_src &&
+             m_VrrTarget->params.format == swapchainFrame.fbo->params.format &&
+             pl_color_space_equal(&preparedColor, &swapchainFrame.color_space) &&
+             pl_color_repr_equal(&preparedRepr, &swapchainFrame.color_repr)) {
+        // A same-format copy, scaled only if the window was resized since.
+        pl_tex_blit_params blit = {};
+        blit.src = m_VrrTarget;
+        blit.dst = swapchainFrame.fbo;
+        blit.sample_mode = PL_TEX_SAMPLE_LINEAR;
+        pl_tex_blit(m_Vulkan->gpu, &blit);
+    }
+    else {
+        // The swapchain changed format or colorimetry since preparation.
+        pl_swapchain_frame prepared = {};
+        prepared.fbo = m_VrrTarget;
+        prepared.color_space = preparedColor;
+        prepared.color_repr = preparedRepr;
+        pl_frame sourceFrame;
+        pl_frame_from_swapchain(&sourceFrame, &prepared);
+        if (!pl_render_image(m_Renderer, &sourceFrame, &targetFrame, &pl_render_fast_params)) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                         "VRR: pl_render_image() failed converting the prepared image");
+        }
+    }
+
+    const bool submitted = pl_swapchain_submit_frame(m_Swapchain);
+    if (m_VrrDirect) {
+        // The retained source is read by this present: let the GPU finish
+        // before the caller releases it. Only the first frame after a
+        // colorspace change takes this path.
+        pl_gpu_finish(m_Vulkan->gpu);
+    }
+    m_VrrPrepared = false;
+    m_VrrDirect = false;
+    if (!submitted) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "pl_swapchain_submit_frame() failed");
+        SDL_Event event;
+        event.type = SDL_RENDER_DEVICE_RESET;
+        SDL_PushEvent(&event);
+        return false;
+    }
+
+    // Bounds GPU work in flight; with a blit-only frame this returns quickly.
+    pl_swapchain_swap_buffers(m_Swapchain);
+    return true;
+}
+
+void PlVkRenderer::vrrDiscardPrepared()
+{
+    m_VrrPrepared = false;
+    m_VrrDirect = false;
+}
+
+Vrr::PrepareResult PlVkRenderer::vrrPrepare(void* payload, bool)
+{
+    AVFrame* frame = static_cast<AVFrame*>(payload);
+    pl_frame mappedFrame;
+    if (!mapAvFrameToPlacebo(frame, &mappedFrame)) {
+        return {};
+    }
+    bool retainsSource = false;
+    if (!vrrPrepareMappedFrame(mappedFrame, retainsSource)) {
+        unmapAvFrameFromPlacebo(frame, &mappedFrame);
+        return {};
+    }
+    if (retainsSource) {
+        m_VrrDirectFrame = mappedFrame;
+        m_VrrDirectAvFrame = frame;
+        return {true, false};
+    }
+    // GPU reads of the decoder surface completed in preparation.
+    unmapAvFrameFromPlacebo(frame, &mappedFrame);
+    return {true, true};
+}
+
+Vrr::PresentResult PlVkRenderer::vrrPresent(bool)
+{
+    const bool presented = vrrPresentPrepared();
+    if (m_VrrDirectAvFrame) {
+        unmapAvFrameFromPlacebo(m_VrrDirectAvFrame, &m_VrrDirectFrame);
+        m_VrrDirectAvFrame = nullptr;
+    }
+    return {presented};
+}
+
+void PlVkRenderer::vrrCancel()
+{
+    vrrDiscardPrepared();
+    if (m_VrrDirectAvFrame) {
+        unmapAvFrameFromPlacebo(m_VrrDirectAvFrame, &m_VrrDirectFrame);
+        m_VrrDirectAvFrame = nullptr;
+    }
+}
+
+void PlVkRenderer::vrrRelease(void* payload)
+{
+    AVFrame* frame = static_cast<AVFrame*>(payload);
+    av_frame_free(&frame);
+}
+
+void PlVkRenderer::vrrThreadStopping()
+{
+    vrrCancel();
 }
 
 bool PlVkRenderer::testRenderFrame(AVFrame *frame)
