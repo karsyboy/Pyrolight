@@ -26,6 +26,12 @@ public:
     static
     int getDisplayRefreshRate(SDL_Window* window);
 
+    // The current refresh rate of a display, or 0 when it is unknown. Unlike
+    // getDisplayRefreshRate() this never assumes 60 Hz: VRR qualification
+    // must not be decided on a guessed refresh rate.
+    static
+    int getDisplayRefreshRateStrict(int displayIndex);
+
     static
     bool hasFastAes();
 

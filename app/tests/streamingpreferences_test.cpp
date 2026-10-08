@@ -116,6 +116,51 @@ private slots:
         QCOMPARE(m_Preferences->bitrateKbps, 50000);
     }
 
+    void vrrSettingsDefaultPersistPerProfileAndKeepFps()
+    {
+        // Defaults: VRR off, Balanced, Reduce judder on.
+        QCOMPARE(m_Preferences->enableVrr, false);
+        QCOMPARE(m_Preferences->vrrLatencyMode, int(StreamingPreferences::VLM_BALANCED));
+        QVERIFY(m_Preferences->smoothVrrFrameTiming);
+        QVERIFY(!m_Preferences->vrrTimingCustomized());
+        QCOMPARE(m_Preferences->vrrBufferPerMille(), 1000);
+
+        // Enabling VRR never rewrites the saved frame rate.
+        m_Preferences->fps = 144;
+        m_Preferences->enableVrr = true;
+        m_Preferences->applyVrrPreset(StreamingPreferences::VLM_LOWEST_LATENCY);
+        QCOMPARE(m_Preferences->fps, 144);
+        QCOMPARE(m_Preferences->vrrBufferPerMille(), 500);
+        m_Preferences->setVrrToleranceUs(1100);
+        QCOMPARE(m_Preferences->vrrToleranceUs(), 1000);
+        m_Preferences->setVrrBufferPerMille(10);
+        QCOMPARE(m_Preferences->vrrBufferPerMille(), 250);
+        QVERIFY(m_Preferences->vrrTimingCustomized());
+        m_Preferences->smoothVrrFrameTiming = false;
+        QVERIFY(m_Preferences->createProfile(QStringLiteral("VRR")));
+        const QString vrrId = m_Preferences->activeProfileId();
+        m_Preferences->save();
+
+        QVERIFY(m_Preferences->activateProfile(QStringLiteral("default")));
+        QVERIFY(m_Preferences->activateProfile(vrrId));
+        m_Preferences->save();
+        m_Preferences->reload();
+        QCOMPARE(m_Preferences->activeProfileId(), vrrId);
+        QCOMPARE(m_Preferences->enableVrr, true);
+        QCOMPARE(m_Preferences->fps, 144);
+        QCOMPARE(m_Preferences->vrrLatencyMode, int(StreamingPreferences::VLM_LOWEST_LATENCY));
+        QCOMPARE(m_Preferences->vrrToleranceUs(), 1000);
+        QCOMPARE(m_Preferences->vrrBufferPerMille(), 250);
+        QVERIFY(!m_Preferences->smoothVrrFrameTiming);
+
+        // Selecting a mode restores its preset values.
+        m_Preferences->applyVrrPreset(StreamingPreferences::VLM_SMOOTHEST);
+        QVERIFY(!m_Preferences->vrrTimingCustomized());
+        QCOMPARE(m_Preferences->vrrBufferPerMille(), 4000);
+        QCOMPARE(StreamingPreferences::vrrRateForRefresh(120), 116);
+        QCOMPARE(StreamingPreferences::lowLatencyVrrRateForRefresh(144), 120);
+    }
+
     void switchingRestoresAllStreamingValuesAndKeepsGlobals()
     {
         QVERIFY(m_Preferences->createProfile(QStringLiteral("Desktop 4K120")));

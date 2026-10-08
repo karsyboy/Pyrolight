@@ -36,6 +36,14 @@ ComboBox {
     // so we can adjust the combo box width here too
     onActivated: recalculateWidth()
 
+    // Size to the items as soon as they exist, not only after the first
+    // selection: a model assigned or populated at startup (or on
+    // retranslation) would otherwise leave the box too narrow for its text.
+    Component.onCompleted: recalculateWidth()
+    onModelChanged: recalculateWidth()
+    onCountChanged: recalculateWidth()
+    onFontChanged: recalculateWidth()
+
     popup.onAboutToShow: {
         // Switch to normal navigation for combo boxes
         SdlGamepadKeyNavigation.setUiNavMode(false)

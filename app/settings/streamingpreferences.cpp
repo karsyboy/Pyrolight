@@ -1,5 +1,6 @@
 #include "streamingpreferences.h"
 #include "bitratecalculator.h"
+#include "streaming/vrrratepolicy.h"
 #include "brandtranslator.h"
 #include "utils.h"
 
@@ -57,6 +58,13 @@
 #define SER_KEEPAWAKE "keepawake"
 #define SER_LANGUAGE "language"
 #define SER_RENDERER "renderer"
+#define SER_ENABLEVRR "enablevrr"
+#define SER_VRRLATENCYMODE "vrrlatencymode"
+#define SER_VRRBUFFERPERMILLE "vrrbufferpermille"
+#define SER_VRRTARGETHUNDREDTHS "vrrtargethundredths"
+#define SER_VRRHISTORYSECONDS "vrrhistoryseconds"
+#define SER_VRRTOLERANCEUS "vrrtoleranceus"
+#define SER_SMOOTHVRRFRAMETIMING "smoothvrrframetiming"
 
 #define SER_PROFILE_VERSION "profiles/version"
 #define SER_ACTIVE_PROFILE "activeProfileId"
@@ -150,6 +158,16 @@ void StreamingPreferences::loadLegacySettings(QSettings& settings)
     absoluteMouseMode = settings.value(SER_ABSMOUSEMODE, false).toBool();
     absoluteTouchMode = settings.value(SER_ABSTOUCHMODE, true).toBool();
     framePacing = settings.value(SER_FRAMEPACING, false).toBool();
+    enableVrr = settings.value(SER_ENABLEVRR, false).toBool();
+    vrrLatencyMode = qBound(int(VLM_SMOOTHEST), settings.value(SER_VRRLATENCYMODE, int(VLM_BALANCED)).toInt(),
+                            int(VLM_LOWEST_LATENCY));
+    m_VrrTimingOptions = VrrTimingOptions{
+        settings.value(SER_VRRBUFFERPERMILLE, 0).toInt(),
+        settings.value(SER_VRRTARGETHUNDREDTHS, 0).toInt(),
+        settings.value(SER_VRRHISTORYSECONDS, 0).toInt(),
+        settings.value(SER_VRRTOLERANCEUS, 0).toInt(),
+    }.resolved(vrrLatencyMode);
+    smoothVrrFrameTiming = settings.value(SER_SMOOTHVRRFRAMETIMING, true).toBool();
     connectionWarnings = settings.value(SER_CONNWARNINGS, true).toBool();
     configurationWarnings = settings.value(SER_CONFWARNINGS, true).toBool();
     richPresence = settings.value(SER_RICHPRESENCE, true).toBool();
@@ -373,6 +391,13 @@ QVariantMap StreamingPreferences::profileSettings() const
         {SER_RENDERER, static_cast<int>(rendererSelection)},
         {SER_WINDOWMODE, static_cast<int>(windowMode)},
         {SER_MUTEONFOCUSLOSS, muteOnFocusLoss},
+        {SER_ENABLEVRR, enableVrr},
+        {SER_VRRLATENCYMODE, vrrLatencyMode},
+        {SER_VRRBUFFERPERMILLE, m_VrrTimingOptions.bufferPerMille},
+        {SER_VRRTARGETHUNDREDTHS, m_VrrTimingOptions.targetHundredths},
+        {SER_VRRHISTORYSECONDS, m_VrrTimingOptions.historySeconds},
+        {SER_VRRTOLERANCEUS, m_VrrTimingOptions.toleranceUs},
+        {SER_SMOOTHVRRFRAMETIMING, smoothVrrFrameTiming},
     };
 }
 
@@ -398,6 +423,13 @@ QVariantMap StreamingPreferences::defaultProfileSettings() const
         {SER_RENDERER, static_cast<int>(RendererSelection::RS_AUTO)},
         {SER_WINDOWMODE, static_cast<int>(recommendedFullScreenMode)},
         {SER_MUTEONFOCUSLOSS, false},
+        {SER_ENABLEVRR, false},
+        {SER_VRRLATENCYMODE, static_cast<int>(VLM_BALANCED)},
+        {SER_VRRBUFFERPERMILLE, VrrTimingOptions::preset(VLM_BALANCED).bufferPerMille},
+        {SER_VRRTARGETHUNDREDTHS, VrrTimingOptions::preset(VLM_BALANCED).targetHundredths},
+        {SER_VRRHISTORYSECONDS, VrrTimingOptions::preset(VLM_BALANCED).historySeconds},
+        {SER_VRRTOLERANCEUS, VrrTimingOptions::preset(VLM_BALANCED).toleranceUs},
+        {SER_SMOOTHVRRFRAMETIMING, true},
     };
     defaults.insert(SER_BITRATE, getDefaultBitrate(1920, 1080, 60, false, VCC_AUTO, false));
     return defaults;
@@ -467,6 +499,15 @@ void StreamingPreferences::applyProfileSettings(const QVariantMap& values)
         boundedInt(SER_RENDERER, RS_AUTO, RS_AVSBDL, RS_AUTO));
     windowMode = static_cast<WindowMode>(
         boundedInt(SER_WINDOWMODE, WM_FULLSCREEN, WM_WINDOWED, recommendedFullScreenMode));
+    enableVrr = value(SER_ENABLEVRR).toBool();
+    vrrLatencyMode = boundedInt(SER_VRRLATENCYMODE, VLM_SMOOTHEST, VLM_LOWEST_LATENCY, VLM_BALANCED);
+    m_VrrTimingOptions = VrrTimingOptions{
+        boundedInt(SER_VRRBUFFERPERMILLE, 0, 100000, 0),
+        boundedInt(SER_VRRTARGETHUNDREDTHS, 0, 100000, 0),
+        boundedInt(SER_VRRHISTORYSECONDS, 0, 100000, 0),
+        boundedInt(SER_VRRTOLERANCEUS, 0, 100000, 0),
+    }.resolved(vrrLatencyMode);
+    smoothVrrFrameTiming = value(SER_SMOOTHVRRFRAMETIMING).toBool();
 
     const int defaultBitrate = getDefaultBitrate(width, height, fps, enableYUV444,
                                                   videoCodecConfig, enableHdr);
@@ -647,9 +688,84 @@ void StreamingPreferences::emitProfileSettingChanges(const QVariantMap& oldValue
     if (changed(SER_RENDERER)) emit rendererSelectionChanged();
     if (changed(SER_WINDOWMODE)) emit windowModeChanged();
     if (changed(SER_MUTEONFOCUSLOSS)) emit muteOnFocusLossChanged();
+    if (changed(SER_ENABLEVRR)) emit enableVrrChanged();
+    if (changed(SER_VRRLATENCYMODE)) emit vrrLatencyModeChanged();
+    if (changed(SER_VRRBUFFERPERMILLE) || changed(SER_VRRTARGETHUNDREDTHS) ||
+        changed(SER_VRRHISTORYSECONDS) || changed(SER_VRRTOLERANCEUS)) emit vrrTimingChanged();
+    if (changed(SER_SMOOTHVRRFRAMETIMING)) emit smoothVrrFrameTimingChanged();
 
     m_ApplyingProfile = false;
     emit applyingProfileChanged();
+}
+
+void StreamingPreferences::applyVrrPreset(int mode)
+{
+    if (mode < VLM_SMOOTHEST || mode > VLM_LOWEST_LATENCY) {
+        return;
+    }
+    vrrLatencyMode = mode;
+    m_VrrTimingOptions = VrrTimingOptions::preset(mode);
+    emit vrrLatencyModeChanged();
+    emit vrrTimingChanged();
+}
+
+int StreamingPreferences::vrrRateForRefresh(int refreshHz)
+{
+    return VrrRatePolicy::vrrRateForRefresh(refreshHz);
+}
+
+int StreamingPreferences::lowLatencyVrrRateForRefresh(int refreshHz)
+{
+    return VrrRatePolicy::lowLatencyRateForRefresh(refreshHz);
+}
+
+bool StreamingPreferences::vrrTimingCustomized() const
+{
+    return !(m_VrrTimingOptions == VrrTimingOptions::preset(vrrLatencyMode));
+}
+
+void StreamingPreferences::setVrrBufferPerMille(int value)
+{
+    VrrTimingOptions options = m_VrrTimingOptions;
+    options.bufferPerMille = value;
+    options = options.resolved(vrrLatencyMode);
+    if (!(options == m_VrrTimingOptions)) {
+        m_VrrTimingOptions = options;
+        emit vrrTimingChanged();
+    }
+}
+
+void StreamingPreferences::setVrrTargetHundredths(int value)
+{
+    VrrTimingOptions options = m_VrrTimingOptions;
+    options.targetHundredths = value;
+    options = options.resolved(vrrLatencyMode);
+    if (!(options == m_VrrTimingOptions)) {
+        m_VrrTimingOptions = options;
+        emit vrrTimingChanged();
+    }
+}
+
+void StreamingPreferences::setVrrHistorySeconds(int value)
+{
+    VrrTimingOptions options = m_VrrTimingOptions;
+    options.historySeconds = value;
+    options = options.resolved(vrrLatencyMode);
+    if (!(options == m_VrrTimingOptions)) {
+        m_VrrTimingOptions = options;
+        emit vrrTimingChanged();
+    }
+}
+
+void StreamingPreferences::setVrrToleranceUs(int value)
+{
+    VrrTimingOptions options = m_VrrTimingOptions;
+    options.toleranceUs = value;
+    options = options.resolved(vrrLatencyMode);
+    if (!(options == m_VrrTimingOptions)) {
+        m_VrrTimingOptions = options;
+        emit vrrTimingChanged();
+    }
 }
 
 void StreamingPreferences::setProfileError(const QString& error)

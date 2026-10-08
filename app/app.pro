@@ -198,6 +198,11 @@ SOURCES += \
     gui/appmodel.cpp \
     streaming/bandwidth.cpp \
     streaming/streamutils.cpp \
+    streaming/vrrratepolicy.cpp \
+    streaming/video/ffmpeg-renderers/pacer/vrrpacingworker.cpp \
+    streaming/video/ffmpeg-renderers/pacer/vrrdiagnostics.cpp \
+    streaming/video/ffmpeg-renderers/pacer/vrr/vrrsourceclock.cpp \
+    streaming/video/ffmpeg-renderers/pacer/vrr/vrrtimingcontroller.cpp \
     backend/autoupdatechecker.cpp \
     path.cpp \
     settings/mappingmanager.cpp \
@@ -240,6 +245,15 @@ HEADERS += \
     streaming/video/decoder.h \
     streaming/bandwidth.h \
     streaming/streamutils.h \
+    streaming/vrrratepolicy.h \
+    settings/vrrtimingoptions.h \
+    streaming/video/ffmpeg-renderers/pacer/vrrpacingworker.h \
+    streaming/video/ffmpeg-renderers/pacer/vrrdiagnostics.h \
+    streaming/video/ffmpeg-renderers/pacer/vrr/vrrtypes.h \
+    streaming/video/ffmpeg-renderers/pacer/vrr/vrrsourceclock.h \
+    streaming/video/ffmpeg-renderers/pacer/vrr/vrrintervalbuffer.h \
+    streaming/video/ffmpeg-renderers/pacer/vrr/vrrsmoother.h \
+    streaming/video/ffmpeg-renderers/pacer/vrr/vrrtimingcontroller.h \
     backend/autoupdatechecker.h \
     path.h \
     settings/mappingmanager.h \

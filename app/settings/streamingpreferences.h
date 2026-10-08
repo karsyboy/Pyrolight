@@ -6,6 +6,8 @@
 #include <QStringList>
 #include <QVariantMap>
 
+#include "vrrtimingoptions.h"
+
 class QSettings;
 
 class StreamingPreferences : public QObject
@@ -184,8 +186,42 @@ public:
     Q_PROPERTY(bool keepAwake MEMBER keepAwake NOTIFY keepAwakeChanged)
     Q_PROPERTY(CaptureSysKeysMode captureSysKeysMode MEMBER captureSysKeysMode NOTIFY captureSysKeysModeChanged)
     Q_PROPERTY(Language language MEMBER language NOTIFY languageChanged);
+    Q_PROPERTY(bool enableVrr MEMBER enableVrr NOTIFY enableVrrChanged)
+    Q_PROPERTY(int vrrLatencyMode MEMBER vrrLatencyMode NOTIFY vrrLatencyModeChanged)
+    Q_PROPERTY(int vrrBufferPerMille READ vrrBufferPerMille WRITE setVrrBufferPerMille NOTIFY vrrTimingChanged)
+    Q_PROPERTY(int vrrTargetHundredths READ vrrTargetHundredths WRITE setVrrTargetHundredths NOTIFY vrrTimingChanged)
+    Q_PROPERTY(int vrrHistorySeconds READ vrrHistorySeconds WRITE setVrrHistorySeconds NOTIFY vrrTimingChanged)
+    Q_PROPERTY(int vrrToleranceUs READ vrrToleranceUs WRITE setVrrToleranceUs NOTIFY vrrTimingChanged)
+    Q_PROPERTY(bool vrrTimingCustomized READ vrrTimingCustomized NOTIFY vrrTimingChanged)
+    Q_PROPERTY(bool smoothVrrFrameTiming MEMBER smoothVrrFrameTiming NOTIFY smoothVrrFrameTimingChanged)
 
     Q_INVOKABLE bool retranslate();
+
+    // VRR timing modes; the IDs are persisted.
+    enum VrrLatencyMode
+    {
+        VLM_SMOOTHEST = 0,
+        VLM_BALANCED = 1,
+        VLM_LOWEST_LATENCY = 2,
+    };
+    Q_ENUM(VrrLatencyMode)
+
+    // Select a timing mode and its preset values.
+    Q_INVOKABLE void applyVrrPreset(int mode);
+    // Calculated VRR stream rates for a refresh rate (see VrrRatePolicy).
+    Q_INVOKABLE static int vrrRateForRefresh(int refreshHz);
+    Q_INVOKABLE static int lowLatencyVrrRateForRefresh(int refreshHz);
+
+    int vrrBufferPerMille() const { return m_VrrTimingOptions.bufferPerMille; }
+    int vrrTargetHundredths() const { return m_VrrTimingOptions.targetHundredths; }
+    int vrrHistorySeconds() const { return m_VrrTimingOptions.historySeconds; }
+    int vrrToleranceUs() const { return m_VrrTimingOptions.toleranceUs; }
+    bool vrrTimingCustomized() const;
+    void setVrrBufferPerMille(int value);
+    void setVrrTargetHundredths(int value);
+    void setVrrHistorySeconds(int value);
+    void setVrrToleranceUs(int value);
+    VrrTimingOptions vrrTimingOptions() const { return m_VrrTimingOptions; }
 
     // Directly accessible members for preferences
     int width;
@@ -227,6 +263,12 @@ public:
     Language language;
     CaptureSysKeysMode captureSysKeysMode;
     RendererSelection rendererSelection;
+    // Present on a variable-refresh display with adaptive frame pacing.
+    // Toggling VRR never rewrites the saved FPS.
+    bool enableVrr;
+    int vrrLatencyMode;
+    // "Reduce judder": regularize uneven host frame timing.
+    bool smoothVrrFrameTiming;
 
 signals:
     void displayModeChanged();
@@ -265,6 +307,10 @@ signals:
     void keepAwakeChanged();
     void languageChanged();
     void rendererSelectionChanged();
+    void enableVrrChanged();
+    void vrrLatencyModeChanged();
+    void vrrTimingChanged();
+    void smoothVrrFrameTimingChanged();
     void profilesChanged();
     void activeProfileChanged();
     void profileLoaded();
@@ -295,6 +341,7 @@ private:
     void setProfileError(const QString& error);
 
     QQmlEngine* m_QmlEngine;
+    VrrTimingOptions m_VrrTimingOptions = VrrTimingOptions::preset(VLM_BALANCED);
     QString m_ActiveProfileId;
     QString m_ActiveProfileName;
     QStringList m_ProfileIds;

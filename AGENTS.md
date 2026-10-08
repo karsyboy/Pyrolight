@@ -35,7 +35,8 @@ Related repositories:
 | --- | --- |
 | `app/streaming/session.cpp` | Stream launch, format selection, decoder creation, PyroWave launch checks |
 | `app/streaming/video/pyrowave*.{h,cpp}` | PyroWave decoder, native frame and color rules, record-framed adapter |
-| `app/streaming/video/ffmpeg-renderers/plvk.*` | libplacebo Vulkan renderer shared with the PyroWave decoder |
+| `app/streaming/video/ffmpeg-renderers/plvk.*` | libplacebo Vulkan renderer shared with the PyroWave decoder; Linux VRR presenter |
+| `app/streaming/video/ffmpeg-renderers/pacer/vrr*`, `pacer/vrr/`, `app/streaming/vrrratepolicy.*` | VRR timing controller, pacing worker, diagnostics and stream-rate choices |
 | `app/streaming/input/gamepad.cpp`, `gamepadidentity.h` | Controller arrival, button mapping, DualSense Edge identity |
 | `app/settings/streamingpreferences.*`, `bitratecalculator.h` | Preferences, streaming profiles, PyroWave availability and default bitrate |
 | `app/backend/networkbuffers.*`, `pyrowavecalibrator.*`, `pyrowavebandwidth.h`, `nvhttp.cpp` | Receive-buffer diagnostics/remediation, bandwidth calibration, HTTPS probe |
@@ -60,6 +61,7 @@ Everything else under `app/` is upstream Moonlight code.
 | User-visible setup, install, usage | `README.md` |
 | Build, tests, release | `CONTRIBUTING.md`; `.github/workflows/` for exact CI steps |
 | Decoder, renderer, color, bitrate, PyroWave pin | `docs/PYROWAVE.md` |
+| VRR presentation, timing controller, `clientVrrRequested` | `docs/VRR.md` |
 | Dialects, receive buffers, calibration | `docs/PYROWAVE_NETWORKING.md` |
 | Linux Wayland/X11 selection, AppImage graphics-stack packaging | `docs/LINUX_DISPLAY.md` |
 | Linux distribution packages, dependencies, icon name | `docs/LINUX_PACKAGES.md` |
@@ -76,12 +78,17 @@ Everything else under `app/` is upstream Moonlight code.
   adapter or framing inference; record mode is used only when negotiated.
 - **Decode stays on the GPU.** Decoder and libplacebo share one Vulkan device;
   decoded planes never touch CPU memory; the single-slot mailbox and render
-  thread bound latency; no per-frame allocation in steady state.
+  thread (with VRR: decode mailbox, bounded plane-set pool and pacing worker)
+  bound latency; no per-frame allocation in steady state.
 - **Visible dimensions** are used for textures and crop; wavelet padding never
   reaches the screen.
 - **Network tools are opt-in.** No privileged change (sysctl, NIC settings)
   happens without the user pressing the button; calibration never changes
   settings automatically.
+- **VRR presentation** stays bounded: at most 4 waiting frames plus the one
+  presented, stale frames replaced rather than buffered, VRR qualified only on
+  a known refresh rate, and any unmet requirement keeps synchronized fixed
+  pacing. Non-VRR sessions keep the classic pacer unchanged.
 - **Streaming profiles** keep stream settings per profile and input, interface
   and language settings global; existing flat settings are captured once as
   the Default profile.

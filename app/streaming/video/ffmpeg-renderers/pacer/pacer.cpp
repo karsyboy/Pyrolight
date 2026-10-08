@@ -1,5 +1,6 @@
 #include "pacer.h"
 #include "streaming/streamutils.h"
+#include "vrrdiagnostics.h"
 
 #ifdef Q_OS_WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -45,6 +46,14 @@ Pacer::Pacer(IFFmpegRenderer* renderer, PVIDEO_STATS videoStats) :
 
 Pacer::~Pacer()
 {
+    // The VRR worker presents through the renderer: stop it first. Its thread
+    // releases the presenter state; queued frames are freed here.
+    if (m_VrrWorker) {
+        Vrr::PacingWorker::Stats sessionStart = {};
+        logVrrSummary("VRR session summary", sessionStart);
+    }
+    m_VrrWorker.reset();
+
     m_Stopping = true;
 
     // Stop the V-sync thread
@@ -259,11 +268,55 @@ void Pacer::handleVsync(int timeUntilNextVsyncMillis)
     enqueueFrameForRenderingAndUnlock(m_PacingQueue.dequeue());
 }
 
-bool Pacer::initialize(SDL_Window* window, int maxVideoFps, bool enablePacing)
+static uint64_t vrrClock()
+{
+    return LiGetMicroseconds();
+}
+
+bool Pacer::initialize(SDL_Window* window, int maxVideoFps, bool enablePacing,
+                       const VRR_PARAMETERS* vrr)
 {
     m_MaxVideoFps = maxVideoFps;
     m_DisplayFps = StreamUtils::getDisplayRefreshRate(window);
     m_RendererAttributes = m_VsyncRenderer->getRendererAttributes();
+
+    m_VrrRequested = vrr != nullptr && vrr->enabled;
+    if (m_VrrRequested) {
+        Vrr::PresentProtection protection = Vrr::PresentProtection::SoftwareFloor;
+        m_VrrFallback = Vrr::FallbackReason::UnsupportedRenderer;
+        Vrr::IFramePresenter* presenter = m_VsyncRenderer->isRenderThreadSupported() ?
+            m_VsyncRenderer->getVrrPresenter(&protection, &m_VrrFallback) : nullptr;
+        if (presenter != nullptr) {
+            Vrr::SessionConfig config;
+            config.displayRefreshHz = vrr->displayRefreshHz;
+            config.streamRateHz = maxVideoFps;
+            config.latencyMode = vrr->latencyMode;
+            config.timing = vrr->timing;
+            config.reduceJudder = vrr->reduceJudder;
+            config.protection = protection;
+            m_VrrWorker = std::make_unique<Vrr::PacingWorker>(config, presenter, vrrClock);
+            if (m_VrrWorker->start([] {
+                    if (SDL_SetThreadPriority(SDL_THREAD_PRIORITY_TIME_CRITICAL) < 0) {
+                        SDL_SetThreadPriority(SDL_THREAD_PRIORITY_HIGH);
+                    }
+                })) {
+                m_VrrFallback = Vrr::FallbackReason::NoFallback;
+                SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                            "VRR presentation active: %d FPS stream on a %d Hz display (%s, %s protection)",
+                            maxVideoFps, vrr->displayRefreshHz, m_VsyncRenderer->getVrrPresentModeName(),
+                            protection == Vrr::PresentProtection::Native ? "native" : "software floor");
+                return true;
+            }
+            m_VrrWorker.reset();
+            m_VrrFallback = Vrr::FallbackReason::InitializationFailed;
+        }
+        // A requested VRR session that cannot present adaptively keeps
+        // synchronized presentation with classic pacing.
+        enablePacing = true;
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "VRR presentation unavailable (%s); using fixed frame pacing",
+                    Vrr::fallbackReasonName(m_VrrFallback));
+    }
 
     if (enablePacing) {
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
@@ -405,10 +458,23 @@ void Pacer::dropFrameForEnqueue(QQueue<AVFrame*>& queue)
     }
 }
 
-void Pacer::submitFrame(AVFrame* frame)
+void Pacer::submitFrame(AVFrame* frame, const Vrr::FrameTiming* timing)
 {
     // Make sure initialize() has been called
     SDL_assert(m_MaxVideoFps != 0);
+
+    if (m_VrrWorker) {
+        Vrr::FrameTiming frameTiming;
+        if (timing) {
+            frameTiming = *timing;
+        }
+        else {
+            frameTiming.readyUs = LiGetMicroseconds();
+        }
+        // The worker owns the frame from here and frees it when done.
+        m_VrrWorker->submit(frameTiming, frame);
+        return;
+    }
 
     // Queue the frame and possibly wake up the render thread
     m_FrameQueueLock.lock();
@@ -420,5 +486,62 @@ void Pacer::submitFrame(AVFrame* frame)
     }
     else {
         enqueueFrameForRenderingAndUnlock(frame);
+    }
+}
+
+Vrr::PacingWorker::Stats Pacer::vrrStats() const
+{
+    return m_VrrWorker ? m_VrrWorker->stats() : Vrr::PacingWorker::Stats{};
+}
+
+void Pacer::accumulateVrrStats()
+{
+    if (!m_VrrWorker) {
+        return;
+    }
+    const Vrr::PacingWorker::Stats now = m_VrrWorker->stats();
+    const Vrr::PacingWorker::Stats& last = m_VrrAccumulated;
+    const uint64_t presented = now.presented - last.presented;
+    const uint64_t dropped = (now.queueDrops - last.queueDrops) + (now.staleDrops - last.staleDrops) +
+                             (now.failedPreparations - last.failedPreparations);
+    const uint64_t preparation = now.totalPreparationUs - last.totalPreparationUs;
+    const uint64_t presentCall = now.totalPresentCallUs - last.totalPresentCallUs;
+    const uint64_t queued = now.totalArrivalToPresentUs - last.totalArrivalToPresentUs;
+    m_VideoStats->renderedFrames += uint32_t(presented);
+    m_VideoStats->pacerDroppedFrames += uint32_t(dropped);
+    m_VideoStats->totalRenderTimeUs += preparation + presentCall;
+    // Frame queue delay: arrival to submission (queueing, playout delay and
+    // target waits), excluding preparation.
+    m_VideoStats->totalPacerTimeUs += queued > preparation ? queued - preparation : 0;
+    m_VrrAccumulated = now;
+
+    // A periodic summary in the log, without per-frame logging.
+    const uint64_t nowUs = LiGetMicroseconds();
+    if (!m_VrrLastLogUs) {
+        m_VrrLastLogUs = nowUs;
+    }
+    else if (nowUs - m_VrrLastLogUs >= 10000000) {
+        logVrrSummary("VRR presentation (last 10 s)", m_VrrLogLast);
+        m_VrrLastLogUs = nowUs;
+    }
+}
+
+int Pacer::formatVrrStats(char* output, int length)
+{
+    if (!m_VrrWorker) {
+        return m_VrrRequested ? Vrr::formatFallback(m_VrrFallback, output, length) : 0;
+    }
+    return Vrr::formatOverlay(m_VrrWorker->stats(), m_VrrOverlayLast, m_VrrWorker->config(),
+                              m_VsyncRenderer->getVrrPresentModeName(), output, length);
+}
+
+void Pacer::logVrrSummary(const char* title, Vrr::PacingWorker::Stats& last)
+{
+    if (!m_VrrWorker) {
+        return;
+    }
+    char summary[1024];
+    if (Vrr::formatSummary(title, m_VrrWorker->stats(), last, summary, sizeof(summary))) {
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "%s", summary);
     }
 }

@@ -202,6 +202,15 @@ int StreamUtils::getDisplayRefreshRate(SDL_Window* window)
     return mode.refresh_rate;
 }
 
+int StreamUtils::getDisplayRefreshRateStrict(int displayIndex)
+{
+    SDL_DisplayMode mode;
+    if (displayIndex < 0 || SDL_GetCurrentDisplayMode(displayIndex, &mode) != 0) {
+        return 0;
+    }
+    return mode.refresh_rate > 1 ? mode.refresh_rate : 0;
+}
+
 bool StreamUtils::hasFastAes()
 {
 #ifndef __has_builtin

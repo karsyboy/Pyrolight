@@ -408,7 +408,9 @@ bool FFmpegVideoDecoder::createFrontendRenderer(PDECODER_PARAMETERS params, bool
         else
         {
 #ifdef HAVE_LIBPLACEBO_VULKAN
-            if (qgetenv("PREFER_VULKAN") == "1") {
+            // VRR presentation is implemented by the Vulkan renderer; probes
+            // for a VRR session use it too so negotiated color matches.
+            if (qgetenv("PREFER_VULKAN") == "1" || params->vrr.enabled || params->vrr.preferRenderer) {
                 m_FrontendRenderer = new PlVkRenderer(AV_HWDEVICE_TYPE_NONE, m_BackendRenderer);
                 if (initializeRendererInternal(m_FrontendRenderer, params)) {
                     return true;
@@ -498,7 +500,8 @@ bool FFmpegVideoDecoder::completeInitialization(const AVCodec* decoder, enum AVP
     if (testMode != TestMode::TestFrameOnly) {
         m_Pacer = new Pacer(m_FrontendRenderer, &m_ActiveWndVideoStats);
         if (!m_Pacer->initialize(params->window, params->frameRate,
-                                 params->enableFramePacing || (params->enableVsync && (m_FrontendRenderer->getRendererAttributes() & RENDERER_ATTRIBUTE_FORCE_PACING)))) {
+                                 params->enableFramePacing || (params->enableVsync && (m_FrontendRenderer->getRendererAttributes() & RENDERER_ATTRIBUTE_FORCE_PACING)),
+                                 !m_TestOnly ? &params->vrr : nullptr)) {
             return false;
         }
     }
@@ -2023,6 +2026,10 @@ void FFmpegVideoDecoder::decoderThreadProc()
                     // Capture a frame timestamp to measuring pacing delay
                     frame->pkt_dts = LiGetMicroseconds();
 
+                    // Source identity and timing for VRR presentation, which
+                    // schedules frames against the host's RTP timeline.
+                    Vrr::FrameTiming timing;
+                    timing.readyUs = (uint64_t)frame->pkt_dts;
                     if (!m_FrameInfoQueue.isEmpty()) {
                         // Data buffers in the DU are not valid here!
                         DECODE_UNIT du = m_FrameInfoQueue.dequeue();
@@ -2034,12 +2041,17 @@ void FFmpegVideoDecoder::decoderThreadProc()
 
                         // Store the presentation time (90 kHz timebase)
                         frame->pts = (int64_t)du.rtpTimestamp;
+
+                        timing.frameNumber = du.frameNumber;
+                        timing.rtpTimestamp = du.rtpTimestamp;
+                        timing.timestampValid = true;
+                        timing.receiveUs = du.receiveTimeUs;
                     }
 
                     m_ActiveWndVideoStats.decodedFrames++;
 
                     // Queue the frame for rendering (or render now if pacer is disabled)
-                    m_Pacer->submitFrame(frame);
+                    m_Pacer->submitFrame(frame, &timing);
                 }
                 else if (err == AVERROR(EAGAIN)) {
                     VIDEO_FRAME_HANDLE handle;
@@ -2120,15 +2132,24 @@ int FFmpegVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
 
     // Flip stats windows roughly every second
     if (LiGetMicroseconds() > m_ActiveWndVideoStats.measurementStartUs + 1000000) {
+        // Frames presented or dropped by the VRR worker since the last window
+        if (m_Pacer != nullptr) {
+            m_Pacer->accumulateVrrStats();
+        }
+
         // Update overlay stats if it's enabled
         if (Session::get()->getOverlayManager().isOverlayEnabled(Overlay::OverlayDebug)) {
             VIDEO_STATS lastTwoWndStats = {};
             addVideoStats(m_LastWndVideoStats, lastTwoWndStats);
             addVideoStats(m_ActiveWndVideoStats, lastTwoWndStats);
 
-            stringifyVideoStats(lastTwoWndStats,
-                                Session::get()->getOverlayManager().getOverlayText(Overlay::OverlayDebug),
-                                Session::get()->getOverlayManager().getOverlayMaxTextLength());
+            char* overlayText = Session::get()->getOverlayManager().getOverlayText(Overlay::OverlayDebug);
+            const int overlayLength = Session::get()->getOverlayManager().getOverlayMaxTextLength();
+            stringifyVideoStats(lastTwoWndStats, overlayText, overlayLength);
+            if (m_Pacer != nullptr) {
+                const int used = (int)strlen(overlayText);
+                m_Pacer->formatVrrStats(overlayText + used, overlayLength - used);
+            }
             Session::get()->getOverlayManager().setOverlayTextUpdated(Overlay::OverlayDebug);
         }
 

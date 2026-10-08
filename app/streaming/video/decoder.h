@@ -3,6 +3,7 @@
 #include <Limelight.h>
 #include "SDL_compat.h"
 #include "settings/streamingpreferences.h"
+#include "settings/vrrtimingoptions.h"
 
 #define SDL_CODE_FRAME_READY 0
 
@@ -33,6 +34,20 @@ typedef struct _VIDEO_STATS {
     uint64_t measurementStartUs;               // microseconds
 } VIDEO_STATS, *PVIDEO_STATS;
 
+// VRR presentation requested for this decoder. `enabled` means the session
+// qualified (V-Sync, a readable refresh rate at or above the stream rate);
+// the renderer still decides whether it can present adaptively.
+typedef struct _VRR_PARAMETERS {
+    bool enabled;
+    // Prefer the renderer VRR playback would use, without enabling VRR
+    // presentation (startup probes, so negotiated color matches playback).
+    bool preferRenderer;
+    int displayRefreshHz;
+    int latencyMode;
+    VrrTimingOptions timing;
+    bool reduceJudder;
+} VRR_PARAMETERS;
+
 typedef struct _DECODER_PARAMETERS {
     SDL_Window* window;
     StreamingPreferences::VideoDecoderSelection vds;
@@ -45,6 +60,7 @@ typedef struct _DECODER_PARAMETERS {
     bool enableVsync;
     bool enableFramePacing;
     bool testOnly;
+    VRR_PARAMETERS vrr;
 } DECODER_PARAMETERS, *PDECODER_PARAMETERS;
 
 #define WINDOW_STATE_CHANGE_SIZE 0x01

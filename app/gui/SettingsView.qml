@@ -782,7 +782,7 @@ Flickable {
                             }
                         }
 
-                        function addRefreshRateOrdered(fpsListModel, refreshRate, description, custom) {
+                        function addRefreshRateOrdered(fpsListModel, refreshRate, description, custom, vrr) {
                             var indexToAdd = 0
                             for (var j = 0; j < fpsListModel.count; j++) {
                                 var existing_fps = parseInt(fpsListModel.get(j).video_fps);
@@ -809,7 +809,8 @@ Flickable {
                                                     {
                                                         "text": description,
                                                         "video_fps": ""+refreshRate,
-                                                        "is_custom": custom
+                                                        "is_custom": custom,
+                                                        "is_vrr": vrr === true
                                                     })
                             }
 
@@ -818,7 +819,7 @@ Flickable {
 
                         function reinitialize() {
                             for (var customIndex = fpsListModel.count - 1; customIndex >= 0; customIndex--) {
-                                if (fpsListModel.get(customIndex).is_custom) {
+                                if (fpsListModel.get(customIndex).is_custom || fpsListModel.get(customIndex).is_vrr) {
                                     fpsListModel.remove(customIndex)
                                 }
                             }
@@ -834,6 +835,25 @@ Flickable {
                                 }
 
                                 addRefreshRateOrdered(fpsListModel, refreshRate, qsTr("%1 FPS").arg(refreshRate), false)
+                            }
+
+                            // Calculated VRR rates, a little below each refresh rate so frames
+                            // stay inside the display's adaptive range. Native rates keep their
+                            // plain labels when a calculated rate matches one.
+                            for (var vrrIndex = 0; StreamingPreferences.enableVsync && StreamingPreferences.enableVrr; vrrIndex++) {
+                                var vrrRefreshRate = SystemProperties.getRefreshRate(vrrIndex);
+                                if (vrrRefreshRate === 0) {
+                                    break
+                                }
+
+                                var vrrRate = StreamingPreferences.vrrRateForRefresh(vrrRefreshRate)
+                                if (vrrRate > 0) {
+                                    addRefreshRateOrdered(fpsListModel, vrrRate, qsTr("%1 FPS (VRR)").arg(vrrRate), false, true)
+                                }
+                                var lowLatencyRate = StreamingPreferences.lowLatencyVrrRateForRefresh(vrrRefreshRate)
+                                if (lowLatencyRate > 0) {
+                                    addRefreshRateOrdered(fpsListModel, lowLatencyRate, qsTr("%1 FPS (VRR, lower latency)").arg(lowLatencyRate), false, true)
+                                }
                             }
 
                             var saved_fps = StreamingPreferences.fps
@@ -875,11 +895,13 @@ Flickable {
                                 text: qsTr("30 FPS")
                                 video_fps: "30"
                                 is_custom: false
+                                is_vrr: false
                             }
                             ListElement {
                                 text: qsTr("60 FPS")
                                 video_fps: "60"
                                 is_custom: false
+                                is_vrr: false
                             }
                         }
 
@@ -1058,8 +1080,10 @@ Flickable {
                         font.pointSize:  12
                         checked: StreamingPreferences.enableVsync
                         onCheckedChanged: {
-                            if (!StreamingPreferences.applyingProfile) {
+                            if (!StreamingPreferences.applyingProfile && StreamingPreferences.enableVsync !== checked) {
                                 StreamingPreferences.enableVsync = checked
+                                // VRR frame rate choices require V-Sync
+                                fpsComboBox.reinitialize()
                             }
                         }
 
@@ -1086,6 +1110,85 @@ Flickable {
                         ToolTip.visible: hovered
                         ToolTip.text: qsTr("Frame pacing reduces micro-stutter by delaying frames that come in too early")
                     }
+                }
+
+                CheckBox {
+                    id: vrrCheck
+                    width: parent.width
+                    hoverEnabled: true
+                    text: qsTr("Variable refresh rate (VRR)")
+                    font.pointSize: 12
+                    enabled: StreamingPreferences.enableVsync
+                    checked: StreamingPreferences.enableVsync && StreamingPreferences.enableVrr
+                    onCheckedChanged: {
+                        if (!StreamingPreferences.applyingProfile && StreamingPreferences.enableVsync &&
+                                StreamingPreferences.enableVrr !== checked) {
+                            StreamingPreferences.enableVrr = checked
+                            // Offer the calculated VRR frame rates (the saved FPS is kept)
+                            fpsComboBox.reinitialize()
+                        }
+                    }
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 8000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Present each frame when the host's frame timing says it is due, on a display with VRR (FreeSync, G-Sync Compatible, HDMI VRR) enabled. Frames are not held for a fixed refresh, and network and decoding jitter are smoothed with a small adaptive buffer. Requires V-Sync and a stream frame rate at or below the display's refresh rate; streams in fullscreen.")
+                }
+
+                Row {
+                    spacing: 5
+                    width: parent.width
+                    visible: vrrCheck.checked
+
+                    Label {
+                        text: qsTr("VRR timing:")
+                        font.pointSize: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+
+                    AutoResizingComboBox {
+                        id: vrrTimingComboBox
+                        textRole: "text"
+                        model: ListModel {
+                            ListElement { text: qsTr("Smoothest"); val: StreamingPreferences.VLM_SMOOTHEST }
+                            ListElement { text: qsTr("Balanced"); val: StreamingPreferences.VLM_BALANCED }
+                            ListElement { text: qsTr("Lowest latency"); val: StreamingPreferences.VLM_LOWEST_LATENCY }
+                        }
+                        currentIndex: StreamingPreferences.vrrLatencyMode
+                        onActivated: {
+                            StreamingPreferences.applyVrrPreset(model.get(currentIndex).val)
+                        }
+                        ToolTip.delay: 1000
+                        ToolTip.timeout: 8000
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Smoothest buffers up to four source frames to ride out unsteady delivery. Balanced buffers up to one frame. Lowest latency buffers at most half a frame and accepts more uneven frames.")
+                    }
+
+                    Button {
+                        text: StreamingPreferences.vrrTimingCustomized ? qsTr("Customized…") : qsTr("Customize…")
+                        onClicked: vrrTimingDialog.open()
+                    }
+
+                    VrrTimingSettings {
+                        id: vrrTimingDialog
+                    }
+                }
+
+                CheckBox {
+                    width: parent.width
+                    hoverEnabled: true
+                    visible: vrrCheck.checked
+                    text: qsTr("Reduce judder")
+                    font.pointSize: 12
+                    checked: StreamingPreferences.smoothVrrFrameTiming
+                    onCheckedChanged: {
+                        if (!StreamingPreferences.applyingProfile) {
+                            StreamingPreferences.smoothVrrFrameTiming = checked
+                        }
+                    }
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 8000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Evens out uneven host frame timing (for example a game alternating short and long frames) by moving frames by up to a few milliseconds. Turn off to follow the host's timestamps exactly.")
                 }
 
                 CheckBox {
