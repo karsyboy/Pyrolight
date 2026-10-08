@@ -140,12 +140,15 @@ target = sourceTime + smoothing + playoutDelay + typicalPreparation
 The worker owns a bounded queue of 4 waiting frames plus the one being
 prepared or presented; decoder surface pools reserve these frames. A full
 queue evicts its oldest frame. A waiting frame older than
-`max(2 × max(period, next RTP interval), playout delay + period)` is replaced
-when a newer frame waits behind it; the only frame is always kept. A frame
-whose preparation finished after both its target and that age, with a newer
-frame waiting, is cancelled. Sustained pressure therefore drops frames instead
-of building latency, while a host stall stays visible rather than being
-buffered.
+`max(2 × max(period, next RTP interval), playout delay + preparation lead + period)`
+is replaced when a newer frame waits behind it; the only frame is always kept.
+The preparation lead is part of the horizon because preparation starts after
+a frame leaves the queue, so an on-time frame's age already includes it. A
+prepared frame is always presented, even late: replacing it would spend a
+second preparation on the next frame and make that one late too. Sustained
+pressure therefore skips frames before any decode or render work, close to
+the actual throughput deficit, instead of building latency, while a host
+stall stays visible rather than being buffered.
 
 For each frame the thread asks the controller for a decision, prepares the
 frame, waits for the target (an interruptible wait to 1 ms before, a sleep to
@@ -175,10 +178,20 @@ Submission is not proof of an adaptive refresh: whether the panel varies its
 refresh depends on the compositor's VRR policy (for example KDE's "Adaptive
 sync: Automatic" for fullscreen windows), the driver and the display.
 
-**PyroWave.** The VRR worker replaces the decoder's single-slot mailbox. It
-queues encoded frames in recycled buffers; preparation decodes into the shared
-planes and renders the presentable image. Every PyroWave frame is independent,
-so stale frames are skipped before decoding.
+**PyroWave.** A decode thread replaces the decoder's render thread. Frames
+arrive on the network receive thread (direct submit), which only copies them
+into recycled buffers and hands them over through a single-slot mailbox; a
+frame the decode thread has not started is replaced by a newer one, so an
+overloaded decoder skips frames before spending work on them. The decode
+thread validates and parses each frame and submits its GPU decode into one of
+a pool of plane sets, then queues it to the worker like a hardware decoder's
+output (ready when the decode is submitted). Preparation renders the planes,
+waiting for the GPU decode and render to complete. Packet parsing and
+validation cost several milliseconds of CPU per frame at high bitrates (for
+example 2880×1920 4:4:4 at 650 Mbps), so it overlaps the previous frame's
+presentation instead of adding to it. The pool grows on demand to at most one
+set more than the worker can own (6) and is kept for the session; each set
+holds three 16-bit planes (about 33 MB at 2880×1920 4:4:4).
 
 Windows (D3D11) and macOS (Metal) presenters are not implemented; those
 platforms report "not supported on this platform" and keep fixed pacing.
@@ -210,8 +223,8 @@ The existing statistics count VRR drops as client frame-queue drops, queue
 delay as arrival to submission without preparation, and rendering time as
 preparation plus the present call. The log records a summary every 10 s and
 one for the whole session at teardown, with the buffer's state and reason,
-preparation lead, judder reserve, floor-delayed and catch-up counts, rebases, rate changes
-and phase resets. Submission times are measured on the client clock; they are not
+preparation lead, judder reserve, floor-delayed and catch-up counts, mean
+preparation and present-call times, rebases, rate changes and phase resets. Submission times are measured on the client clock; they are not
 display scanout times.
 
 ## Validation
@@ -221,8 +234,10 @@ Unit tests (`ctest --test-dir build/tests`):
 - `vrr-timing`: rate policy and presets; jitter does not reach presentation;
   the buffer grows for jitter and releases; Lowest latency's bound; late-frame
   recovery without compressed presents under both protection kinds; host stall
-  and latency step; source-rate changes; a stream at the refresh rate; Reduce
-  judder; RTP wrap; reconnect rebase; lossy PyroWave frames.
+  and latency step; source-rate changes; a stream at the refresh rate;
+  preparation close to the source period (no prepared frame discarded, drops
+  near the throughput deficit); Reduce judder; RTP wrap; reconnect rebase;
+  lossy PyroWave frames.
 - `vrr-worker`: threaded worker with a fake presenter: ordering and release of
   every frame, bounded queue under a stalled presenter, release on stop, and
   presents on target with arrival jitter.

@@ -137,12 +137,6 @@ void PacingWorker::release(Entry& entry)
     }
 }
 
-bool PacingWorker::newerFrameWaiting()
-{
-    std::lock_guard<std::mutex> guard(m_Lock);
-    return m_Count != 0;
-}
-
 bool PacingWorker::popNext(Entry& entry)
 {
     std::array<Entry, kQueuedFrames> stale{};
@@ -266,19 +260,9 @@ void PacingWorker::run()
             continue;
         }
 
-        // A frame prepared too late to be useful gives way to a newer one.
-        if (preparationEnd > entry.timing.readyUs + m_Controller.staleHorizonUs(0) &&
-            preparationEnd > decision.targetUs && newerFrameWaiting()) {
-            m_Presenter->vrrCancel();
-            release(entry);
-            Submission cancelled;
-            cancelled.cancelled = true;
-            m_Controller.noteSubmission(cancelled);
-            std::lock_guard<std::mutex> guard(m_Lock);
-            ++m_Stats.staleDrops;
-            ++m_Stats.cancelled;
-            continue;
-        }
+        // A prepared frame is always presented, even late: replacing it would
+        // spend another preparation on the next frame, which then arrives
+        // later still. Stale frames are skipped before preparation instead.
 
         if (!waitUntil(decision.targetUs)) {
             m_Presenter->vrrCancel();

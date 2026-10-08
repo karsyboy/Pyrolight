@@ -64,9 +64,10 @@ public:
     uint64_t earliestSubmissionUs() const;
     void noteSubmission(const Submission& submission);
 
-    // A queued frame older than this, with a newer frame waiting behind it,
-    // is stale and replaced. Never less than two source intervals, and never
-    // less than the playout delay the buffer deliberately holds.
+    // A frame older than this, with a newer frame waiting behind it, is stale
+    // and replaced. Never less than two source intervals, and never less than
+    // what an on-time frame deliberately spends: the playout delay plus its
+    // preparation, which starts after the frame leaves the queue.
     uint64_t staleHorizonUs(uint64_t successorIntervalUs) const;
 
     uint64_t displayPeriodUs() const { return m_DisplayPeriodUs; }

@@ -82,6 +82,13 @@ public:
     bool vrrPrepareMappedFrame(pl_frame& mappedFrame, bool& retainsSource);
     bool vrrPresentPrepared();
     void vrrDiscardPrepared();
+    // How the last vrrPrepareMappedFrame() spent its time: recording and
+    // submitting the render, then waiting for the GPU to complete it.
+    struct VrrPrepareTiming {
+        uint64_t renderSubmitUs = 0;
+        uint64_t gpuWaitUs = 0;
+    };
+    const VrrPrepareTiming& vrrLastPrepareTiming() const { return m_VrrPrepareTiming; }
 
 private:
     static void lockQueue(AVHWDeviceContext *dev_ctx, uint32_t queue_family, uint32_t index);
@@ -168,6 +175,7 @@ private:
     bool m_VrrDirect = false;
     pl_frame m_VrrDirectFrame = {};
     AVFrame* m_VrrDirectAvFrame = nullptr;
+    VrrPrepareTiming m_VrrPrepareTiming;
 
     // Overlay state
     SDL_SpinLock m_OverlayLock = 0;

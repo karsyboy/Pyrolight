@@ -74,9 +74,11 @@ common-c reassembly ─▶ submitDecodeUnit ─▶ single-slot mailbox ─▶ re
 V-Sync is neither changed nor forced by the decoder. With V-Sync disabled, the
 Vulkan renderer selects the lowest-latency supported present mode.
 
-With [VRR presentation](VRR.md) the VRR pacing worker replaces the mailbox and
-render thread: it queues a bounded number of encoded frames, skips stale ones
-before decoding, and decodes and renders each frame when its schedule requires.
+With [VRR presentation](VRR.md) a decode thread and the VRR pacing worker
+replace the render thread: the decode thread takes frames from a single-slot
+mailbox (skipping frames it has not started when a newer one arrives), decodes
+each into one of a bounded pool of plane sets, and the worker renders and
+presents it when its schedule requires.
 
 ## Color, range and dimensions
 

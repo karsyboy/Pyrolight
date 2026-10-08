@@ -100,7 +100,6 @@ private:
     void run();
     bool popNext(Entry& entry);
     bool waitUntil(uint64_t deadlineUs);
-    bool newerFrameWaiting();
     void release(Entry& entry);
     void recordInterval(uint64_t submitUs, uint64_t intendedUs);
 

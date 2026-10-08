@@ -89,7 +89,7 @@ struct Sim {
             s.readyUs = ready;
             controller.noteSubmission(s);
             presents.push_back({f.number, submit, f.arrivalUs, d});
-            now = submit + 50;
+            now = submit + presentCallUs;
         }
     }
 
@@ -109,6 +109,7 @@ struct Sim {
     uint64_t now = 1000000;
     std::vector<Present> presents;
     uint64_t staleDrops = 0;
+    uint64_t presentCallUs = 50;
 };
 
 double stdev(const std::vector<double>& v)
@@ -353,6 +354,40 @@ void testStreamAtRefresh()
         assert(floored.presents[i].submitUs - floored.presents[i - 1].submitUs >= 8333);
 }
 
+// Preparation (decode and render) close to the source period, as with
+// PyroWave 4:4:4 at 2880x1920 on an integrated GPU. Frames are prepared after
+// leaving the queue, so an on-time frame's age at presentation includes its
+// preparation: it must not be judged stale. A prepared frame is always
+// presented; when the pipeline cannot keep up, frames are skipped before
+// preparation, close to the throughput deficit and with bounded latency.
+void testHeavyPreparation()
+{
+    auto run = [](uint64_t presentCallUs) {
+        Sim sim(config(120, 116));
+        sim.presentCallUs = presentCallUs;
+        auto frames = stream(4000, 8621, 1000);
+        Rng rng;
+        for (auto& f : frames) f.preparationUs = 6500 + rng.next(2001);
+        sim.run(frames);
+        return sim;
+    };
+
+    // Preparation 7.5 ms plus a 0.8 ms present call fit the 8.62 ms period.
+    const Sim keeps = run(800);
+    assert(keeps.staleDrops * 1000 < 4000);
+    size_t late = 0;
+    for (const auto& p : keeps.presents) late += p.submitUs > p.decision.targetUs + 1000;
+    assert(late * 100 < keeps.presents.size());
+
+    // 7.5 + 1.6 ms exceeds the period by about 5 %: drops stay near that.
+    const Sim behind = run(1600);
+    assert(behind.staleDrops * 100 < 4000 * 9);
+    uint64_t worstAge = 0;
+    for (size_t i = 1000; i < behind.presents.size(); ++i)
+        worstAge = std::max(worstAge, behind.presents[i].submitUs - behind.presents[i].arrivalUs);
+    assert(worstAge < behind.controller.staleHorizonUs(0) + 8500 + 1600);
+}
+
 // Reduce judder: an alternating 7/13 ms source (100 FPS average) presents
 // more evenly with smoothing than without, within its 6 ms allowance.
 void testReduceJudder()
@@ -444,6 +479,7 @@ int main()
     testLatencyStep();
     testSourceRateFollowsTheHost();
     testStreamAtRefresh();
+    testHeavyPreparation();
     testReduceJudder();
     testRtpWrap();
     testReconnectRebases();

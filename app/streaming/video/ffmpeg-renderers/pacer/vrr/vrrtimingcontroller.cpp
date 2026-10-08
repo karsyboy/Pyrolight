@@ -502,7 +502,8 @@ void TimingController::noteSubmission(const Submission& submission)
 uint64_t TimingController::staleHorizonUs(uint64_t successorIntervalUs) const
 {
     const uint64_t periodUs = (std::max)(m_Clock.sourcePeriodUs(), successorIntervalUs);
-    return (std::max)(periodUs * 2, m_DelayUs + periodUs);
+    const uint64_t preparationUs = (std::min)(m_Clock.sourcePeriodUs(), m_RenderLeadUs);
+    return (std::max)(periodUs * 2, m_DelayUs + preparationUs + periodUs);
 }
 
 TimingController::Stats TimingController::stats() const

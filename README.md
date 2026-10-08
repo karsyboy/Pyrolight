@@ -93,7 +93,8 @@ Settings, and enable adaptive sync for the display in your compositor (on KDE
 Plasma: **Adaptive sync** set to **Automatic** or **Always**). Pick a **VRR
 timing** mode (**Smoothest**, **Balanced** or **Lowest latency**); the frame
 rate list suggests VRR rates just below the refresh rate, such as 116 FPS at
-120 Hz. VRR currently requires Linux and the Vulkan renderer; when a
+120 Hz; use one of these rather than the full refresh rate, which leaves the
+display no room to follow the game and causes periodic stutter. VRR currently requires Linux and the Vulkan renderer; when a
 requirement is not met, the performance overlay shows why. See
 [VRR presentation](docs/VRR.md) for details.
 

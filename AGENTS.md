@@ -78,7 +78,8 @@ Everything else under `app/` is upstream Moonlight code.
   adapter or framing inference; record mode is used only when negotiated.
 - **Decode stays on the GPU.** Decoder and libplacebo share one Vulkan device;
   decoded planes never touch CPU memory; the single-slot mailbox and render
-  thread bound latency; no per-frame allocation in steady state.
+  thread (with VRR: decode mailbox, bounded plane-set pool and pacing worker)
+  bound latency; no per-frame allocation in steady state.
 - **Visible dimensions** are used for textures and crop; wavelet padding never
   reaches the screen.
 - **Network tools are opt-in.** No privileged change (sysctl, NIC settings)

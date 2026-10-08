@@ -1262,6 +1262,7 @@ bool PlVkRenderer::vrrPrepareMappedFrame(pl_frame& mappedFrame, bool& retainsSou
 {
     retainsSource = false;
     m_VrrPrepared = false;
+    m_VrrPrepareTiming = {};
     if (pl_gpu_is_failed(m_Vulkan->gpu)) {
         SDL_Event event;
         event.type = SDL_RENDER_DEVICE_RESET;
@@ -1276,6 +1277,7 @@ bool PlVkRenderer::vrrPrepareMappedFrame(pl_frame& mappedFrame, bool& retainsSou
     }
     if (!m_VrrSwapchainKnown) {
         m_VrrDirect = true;
+        m_VrrDirectFrame = mappedFrame;
         retainsSource = true;
         return true;
     }
@@ -1292,6 +1294,7 @@ bool PlVkRenderer::vrrPrepareMappedFrame(pl_frame& mappedFrame, bool& retainsSou
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
                      "VRR: pl_tex_recreate() failed for the prepared image");
         m_VrrDirect = true;
+        m_VrrDirectFrame = mappedFrame;
         retainsSource = true;
         return true;
     }
@@ -1302,6 +1305,7 @@ bool PlVkRenderer::vrrPrepareMappedFrame(pl_frame& mappedFrame, bool& retainsSou
     prepared.color_repr = m_VrrRepr;
     pl_frame targetFrame;
     pl_frame_from_swapchain(&targetFrame, &prepared);
+    const uint64_t renderStart = LiGetMicroseconds();
     drawFrame(mappedFrame, targetFrame);
     pl_gpu_flush(m_Vulkan->gpu);
 
@@ -1309,6 +1313,7 @@ bool PlVkRenderer::vrrPrepareMappedFrame(pl_frame& mappedFrame, bool& retainsSou
     // the PyroWave planes) is then free for reuse, and the measured
     // preparation time teaches the controller how early to start.
     const uint64_t waitStart = LiGetMicroseconds();
+    m_VrrPrepareTiming.renderSubmitUs = waitStart - renderStart;
     while (pl_tex_poll(m_Vulkan->gpu, m_VrrTarget, 1000000)) {
         if (LiGetMicroseconds() - waitStart > 50000 || pl_gpu_is_failed(m_Vulkan->gpu)) {
             SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
@@ -1319,6 +1324,7 @@ bool PlVkRenderer::vrrPrepareMappedFrame(pl_frame& mappedFrame, bool& retainsSou
             return false;
         }
     }
+    m_VrrPrepareTiming.gpuWaitUs = LiGetMicroseconds() - waitStart;
     m_VrrPrepared = true;
     return true;
 }
@@ -1421,7 +1427,6 @@ Vrr::PrepareResult PlVkRenderer::vrrPrepare(void* payload, bool)
         return {};
     }
     if (retainsSource) {
-        m_VrrDirectFrame = mappedFrame;
         m_VrrDirectAvFrame = frame;
         return {true, false};
     }

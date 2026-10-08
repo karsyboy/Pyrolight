@@ -1478,6 +1478,14 @@ VRR_PARAMETERS Session::qualifyVrr(int displayIndex, int& fallbackReason) const
             SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                         "VRR: qualified (%d FPS stream on a %d Hz display, timing mode %d, reduce judder %s)",
                         m_StreamConfig.fps, refreshHz, vrr.latencyMode, vrr.reduceJudder ? "on" : "off");
+            if (m_StreamConfig.fps >= refreshHz) {
+                // Panels often run slightly below their nominal rate, and
+                // frames at the maximum rate have no room to vary.
+                SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                            "VRR: the stream runs at the display's maximum refresh rate; "
+                            "a VRR rate such as %d FPS leaves headroom and avoids periodic stutter",
+                            VrrRatePolicy::vrrRateForRefresh(refreshHz));
+            }
         }
         else {
             SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,

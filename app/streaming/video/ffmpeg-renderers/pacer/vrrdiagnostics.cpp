@@ -8,7 +8,7 @@ namespace {
 
 struct Window {
     uint64_t presented, queueDrops, staleDrops, cancelled, intervals, jerks, lateTargets, latched, floorDelayed, catchUps;
-    double meanTargetErrorUs, meanArrivalToPresentUs, meanPreparationUs;
+    double meanTargetErrorUs, meanArrivalToPresentUs, meanPreparationUs, meanPresentCallUs;
 };
 
 Window window(const PacingWorker::Stats& now, const PacingWorker::Stats& last)
@@ -28,6 +28,7 @@ Window window(const PacingWorker::Stats& now, const PacingWorker::Stats& last)
         w.meanTargetErrorUs = double(now.totalTargetErrorUs - last.totalTargetErrorUs) / double(w.presented);
         w.meanArrivalToPresentUs = double(now.totalArrivalToPresentUs - last.totalArrivalToPresentUs) / double(w.presented);
         w.meanPreparationUs = double(now.totalPreparationUs - last.totalPreparationUs) / double(w.presented);
+        w.meanPresentCallUs = double(now.totalPresentCallUs - last.totalPresentCallUs) / double(w.presented);
     }
     return w;
 }
@@ -85,7 +86,8 @@ int formatSummary(const char* title, const PacingWorker::Stats& now, PacingWorke
         "render lead %.2f ms, judder reserve %.2f ms, interval quality %.2f%%, jerk >2 ms %.2f%%, "
         "mean target error %.3f ms, late %.2f%%, latched %.1f%%, floor-delayed %llu, catch-up %llu, "
         "queue drops %llu, stale drops %llu, cancelled %llu, max queue %u, "
-        "arrival to present %.2f ms, preparation %.2f ms, rebases %llu, rate changes %llu, phase resets %llu",
+        "arrival to present %.2f ms, preparation %.2f ms, present call %.2f ms, rebases %llu, rate changes %llu, "
+        "phase resets %llu",
         title, (unsigned long long)w.presented, sourceFps(t),
         t.playoutDelayUs / 1000.0, t.requestedDelayUs / 1000.0, t.maximumDelayUs / 1000.0,
         IntervalBuffer::actionName(t.bufferAction),
@@ -94,7 +96,7 @@ int formatSummary(const char* title, const PacingWorker::Stats& now, PacingWorke
         percent(w.lateTargets, w.presented), percent(w.latched, w.presented),
         (unsigned long long)w.floorDelayed, (unsigned long long)w.catchUps, (unsigned long long)w.queueDrops,
         (unsigned long long)w.staleDrops, (unsigned long long)w.cancelled, now.maxQueueDepth,
-        w.meanArrivalToPresentUs / 1000.0, w.meanPreparationUs / 1000.0,
+        w.meanArrivalToPresentUs / 1000.0, w.meanPreparationUs / 1000.0, w.meanPresentCallUs / 1000.0,
         (unsigned long long)t.rebases, (unsigned long long)t.rateChanges,
         (unsigned long long)t.phaseResets), length);
 }
