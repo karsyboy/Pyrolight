@@ -48,14 +48,14 @@ Download the file for your system from the
 | --- | --- | --- |
 | Windows | `*-windows-x64-installer.exe` | Run the installer |
 | Windows (portable) | `*-windows-x64-portable.zip` | Extract and run `Pyrolight.exe` |
-| Arch Linux / CachyOS (AUR) | `pyrolight-bin` | `paru -S pyrolight-bin` or `yay -S pyrolight-bin` |
+| Arch Linux / CachyOS (pacman repository) | `pyrolight-bin` | Add the [`[pyrowave]` repository](https://github.com/karsyboy/pyrowave-packages#setup), then `sudo pacman -Syu pyrolight-bin` |
 | Arch Linux / CachyOS | `pyrolight-*.pkg.tar.zst` | `sudo pacman -U ./pyrolight-*.pkg.tar.zst` |
 | Debian / Ubuntu | `pyrolight_*.deb` | `sudo apt install ./pyrolight_*.deb` |
 | Fedora / RHEL | `pyrolight-*.rpm` | `sudo dnf install ./pyrolight-*.rpm` |
 | Other Linux | `*-linux-x86_64.AppImage` | `chmod +x pyrolight-*.AppImage`, then run it |
 
-To upgrade, install the newer release the same way; AUR helpers upgrade
-`pyrolight-bin` with the rest of the system. After installing a Linux
+To upgrade, install the newer release the same way; with the pacman repository,
+`sudo pacman -Syu` upgrades `pyrolight-bin` with the rest of the system. After installing a Linux
 package, start **Pyrolight** from the application menu or run `pyrolight`.
 
 - The Linux packages need Ubuntu 22.04, Debian 12, Fedora, RHEL 10, Arch or

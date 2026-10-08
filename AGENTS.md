@@ -49,8 +49,7 @@ Related repositories:
 | `scripts/build-pyrowave-appimage.sh` | Pinned PyroWave AppImage build |
 | `scripts/build-appimage.sh`, `scripts/check-appimage-display-backends.sh`, `app/deploy/linux/*-probe.c` | AppImage packaging, host-library probes and packaging checks |
 | `scripts/build-linux-packages.sh`, `app/deploy/linux/nfpm.yaml`, `scripts/check-linux-icons.sh` | `.deb`/`.rpm`/Arch packages built from the AppImage payload; Linux icon checks |
-| `app/deploy/linux/aur/` | `pyrolight-bin` AUR PKGBUILD repackaging the release Arch package; update and publish scripts |
-| `.github/workflows/` | `release.yml` (tag-triggered Windows and Linux release, optional AUR update) and `build-appimage.yml` |
+| `.github/workflows/` | `release.yml` (tag-triggered Windows and Linux release; starts the pacman repository update) and `build-appimage.yml` |
 | `wix/`, `app/deploy/`, `scripts/` | Upstream packaging, with fork branding |
 
 Everything else under `app/` is upstream Moonlight code.
