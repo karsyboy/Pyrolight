@@ -119,6 +119,10 @@ the **Default** profile.
   not advertise PyroWave, or not with the selected HDR/4:4:4 combination. Change
   those settings, or run `pyroshine healthcheck` on the host to check its
   PyroWave support.
+- **Judder with VRR after changing the display's adaptive sync setting:** some
+  compositor and driver combinations keep a stale VRR state until the display
+  is reinitialized. Sign out and back in (or reboot) after switching, for
+  example, KDE's **Adaptive sync** between **Always** and **Automatic**.
 - **Linux window or input problems:** check **Display backend** in Settings,
   then start Pyrolight with `QT_QPA_PLATFORM=xcb` (for example
   `QT_QPA_PLATFORM=xcb pyrolight`) to see whether the issue is specific to
