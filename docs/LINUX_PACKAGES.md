@@ -62,6 +62,22 @@ All Pyrolight icon files are generated from `assets/logo-no-text.png` by
 `scripts/generate-branding.py` at their upstream paths (`app/res/moonlight.svg`
 and others); only the installed name differs.
 
+## AUR package
+
+`pyrolight-bin` on the AUR repackages the release's
+`pyrolight-<version>-1-x86_64.pkg.tar.zst` with the same layout and
+dependencies, so AUR helpers install and upgrade the same payload. It renames
+the license directory to `/usr/share/licenses/pyrolight-bin` and conflicts with
+`moonlight-qt`, `moonlight-qt-bin` and `moonlight-qt-git`, which own the same
+desktop and AppStream IDs.
+
+Its source is [app/deploy/linux/aur/](../app/deploy/linux/aur/). Keep the
+PKGBUILD's `depends` in sync with the `archlinux` override in `nfpm.yaml`.
+`update.sh <version>` sets `pkgver` and checksums from the published release and
+regenerates `.SRCINFO`; `publish.sh <version>` also checks that the package
+builds and pushes it to the AUR. The release workflow runs `publish.sh` after
+publishing a release; see [CONTRIBUTING.md](../CONTRIBUTING.md#aur-package).
+
 ## Validation
 
 Build and check the packages from an extracted AppImage:

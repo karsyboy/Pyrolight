@@ -92,6 +92,22 @@ VERSION=6.2.1 scripts/build-linux-packages.sh squashfs-root build/packages
 
 See [Linux packages](docs/LINUX_PACKAGES.md).
 
+### AUR package
+
+The release workflow's `aur` job publishes `pyrolight-bin` from
+[app/deploy/linux/aur/](app/deploy/linux/aur/) after each release. It runs only
+when the repository variable `AUR_PUBLISH` is `true` and the secret
+`AUR_SSH_PRIVATE_KEY` holds a private key registered with the AUR account that
+maintains the package. To publish by hand from an Arch system with that key in
+your ssh configuration:
+
+```sh
+app/deploy/linux/aur/publish.sh 6.2.4
+```
+
+A PKGBUILD-only fix needs a `pkgrel` bump in the PKGBUILD before publishing the
+same version again.
+
 ### Windows x64
 
 Install Visual Studio 2022, Qt 6.10.2 with the MSVC 2022 x64 kit, CMake, Git
