@@ -100,12 +100,22 @@ display no room to follow the game and causes periodic stutter. VRR currently re
 requirement is not met, the performance overlay shows why. See
 [VRR presentation](docs/VRR.md) for details.
 
+## Audio quality
+
+**Audio quality** in Settings (or `--audio-quality`) applies to every video
+codec. On a Pyroshine host, **Standard**, **High** and **Maximum** stream stereo
+at 96, 256 and 512 kbps (5.1 at 256, 512 and 768 kbps; 7.1 at 450, 768 and
+1024 kbps). **High** and **Maximum** also request high-quality surround sound
+from any host, even below the 15 Mbps video bitrate Moonlight otherwise
+requires. **Host default** (the default) uses the host's setting; other hosts
+stream Moonlight's usual audio.
+
 ## Streaming profiles
 
 The **Streaming Profile** section of Settings creates, duplicates, renames,
 deletes, and switches between named profiles. A profile stores stream settings
 such as resolution, frame rate, bitrate, codec, HDR, YUV 4:4:4, V-Sync, frame
-pacing, VRR settings, audio configuration, window mode, decoder, and renderer. Input, interface,
+pacing, VRR settings, audio configuration and quality, window mode, decoder, and renderer. Input, interface,
 and language settings stay global. Settings from before profiles existed become
 the **Default** profile.
 

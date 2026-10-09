@@ -305,6 +305,12 @@ StreamCommandLineParser::StreamCommandLineParser()
         {"5.1-surround", StreamingPreferences::AC_51_SURROUND},
         {"7.1-surround", StreamingPreferences::AC_71_SURROUND},
     };
+    m_AudioQualityMap = {
+        {"host-default", StreamingPreferences::AQ_HOST_DEFAULT},
+        {"standard",     StreamingPreferences::AQ_STANDARD},
+        {"high",         StreamingPreferences::AQ_HIGH},
+        {"maximum",      StreamingPreferences::AQ_MAXIMUM},
+    };
     m_VideoCodecMap = {
         {"auto",  StreamingPreferences::VCC_AUTO},
         {"H.264", StreamingPreferences::VCC_FORCE_H264},
@@ -360,6 +366,7 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
     parser.addValueOption("packet-size", "video packet size");
     parser.addChoiceOption("display-mode", "display mode", m_WindowModeMap.keys());
     parser.addChoiceOption("audio-config", "audio config", m_AudioConfigMap.keys());
+    parser.addChoiceOption("audio-quality", "audio quality", m_AudioQualityMap.keys());
     parser.addToggleOption("multi-controller", "multiple controller support");
     parser.addToggleOption("quit-after", "quit app after session");
     parser.addToggleOption("absolute-mouse", "remote desktop optimized mouse control");
@@ -455,6 +462,11 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
     // Resolve --audio-config option
     if (parser.isSet("audio-config")) {
         preferences->audioConfig = mapValue(m_AudioConfigMap, parser.getChoiceOptionValue("audio-config"));
+    }
+
+    // Resolve --audio-quality option
+    if (parser.isSet("audio-quality")) {
+        preferences->audioQuality = mapValue(m_AudioQualityMap, parser.getChoiceOptionValue("audio-quality"));
     }
 
     // Resolve --multi-controller and --no-multi-controller options

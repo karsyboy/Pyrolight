@@ -764,6 +764,22 @@ bool Session::initialize(QQuickWindow* qtWindow)
         break;
     }
 
+    switch (m_Preferences->audioQuality)
+    {
+    case StreamingPreferences::AQ_HOST_DEFAULT:
+        m_StreamConfig.audioQuality = AUDIO_QUALITY_HOST_DEFAULT;
+        break;
+    case StreamingPreferences::AQ_STANDARD:
+        m_StreamConfig.audioQuality = AUDIO_QUALITY_STANDARD;
+        break;
+    case StreamingPreferences::AQ_HIGH:
+        m_StreamConfig.audioQuality = AUDIO_QUALITY_HIGH;
+        break;
+    case StreamingPreferences::AQ_MAXIMUM:
+        m_StreamConfig.audioQuality = AUDIO_QUALITY_MAXIMUM;
+        break;
+    }
+
     LiInitializeAudioCallbacks(&m_AudioCallbacks);
     m_AudioCallbacks.init = arInit;
     m_AudioCallbacks.cleanup = arCleanup;

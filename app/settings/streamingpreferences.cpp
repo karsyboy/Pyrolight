@@ -29,6 +29,7 @@
 #define SER_HOSTAUDIO "hostaudio"
 #define SER_MULTICONT "multicontroller"
 #define SER_AUDIOCFG "audiocfg"
+#define SER_AUDIOQUALITY "audioquality"
 #define SER_VIDEOCFG "videocfg"
 #define SER_HDR "hdr"
 #define SER_YUV444 "yuv444"
@@ -185,6 +186,9 @@ void StreamingPreferences::loadLegacySettings(QSettings& settings)
                                                          static_cast<int>(CaptureSysKeysMode::CSK_OFF)).toInt());
     audioConfig = static_cast<AudioConfig>(settings.value(SER_AUDIOCFG,
                                                   static_cast<int>(AudioConfig::AC_STEREO)).toInt());
+    audioQuality = static_cast<AudioQuality>(qBound(int(AQ_HOST_DEFAULT),
+                                                    settings.value(SER_AUDIOQUALITY, int(AQ_HOST_DEFAULT)).toInt(),
+                                                    int(AQ_MAXIMUM)));
     videoDecoderSelection = static_cast<VideoDecoderSelection>(settings.value(SER_VIDEODEC,
                                                   static_cast<int>(VideoDecoderSelection::VDS_AUTO)).toInt());
     rendererSelection = static_cast<RendererSelection>(settings.value(SER_RENDERER,
@@ -384,6 +388,7 @@ QVariantMap StreamingPreferences::profileSettings() const
         {SER_PACKETSIZE, packetSize},
         {SER_SHOWPERFOVERLAY, showPerformanceOverlay},
         {SER_AUDIOCFG, static_cast<int>(audioConfig)},
+        {SER_AUDIOQUALITY, static_cast<int>(audioQuality)},
         {SER_HDR, enableHdr},
         {SER_YUV444, enableYUV444},
         {SER_VIDEOCFG, static_cast<int>(videoCodecConfig)},
@@ -416,6 +421,7 @@ QVariantMap StreamingPreferences::defaultProfileSettings() const
         {SER_PACKETSIZE, 0},
         {SER_SHOWPERFOVERLAY, false},
         {SER_AUDIOCFG, static_cast<int>(AudioConfig::AC_STEREO)},
+        {SER_AUDIOQUALITY, static_cast<int>(AudioQuality::AQ_HOST_DEFAULT)},
         {SER_HDR, false},
         {SER_YUV444, false},
         {SER_VIDEOCFG, static_cast<int>(VideoCodecConfig::VCC_AUTO)},
@@ -485,6 +491,8 @@ void StreamingPreferences::applyProfileSettings(const QVariantMap& values)
 
     const int audio = boundedInt(SER_AUDIOCFG, AC_STEREO, AC_71_SURROUND, AC_STEREO);
     audioConfig = static_cast<AudioConfig>(audio);
+    audioQuality = static_cast<AudioQuality>(
+        boundedInt(SER_AUDIOQUALITY, AQ_HOST_DEFAULT, AQ_MAXIMUM, AQ_HOST_DEFAULT));
     enableHdr = value(SER_HDR).toBool();
     enableYUV444 = value(SER_YUV444).toBool();
     int codec = boundedInt(SER_VIDEOCFG, VCC_AUTO, VCC_FORCE_PYROWAVE, VCC_AUTO);
@@ -681,6 +689,7 @@ void StreamingPreferences::emitProfileSettingChanges(const QVariantMap& oldValue
     if (changed(SER_FRAMEPACING)) emit framePacingChanged();
     if (changed(SER_SHOWPERFOVERLAY)) emit showPerformanceOverlayChanged();
     if (changed(SER_AUDIOCFG)) emit audioConfigChanged();
+    if (changed(SER_AUDIOQUALITY)) emit audioQualityChanged();
     if (changed(SER_HDR)) emit enableHdrChanged();
     if (changed(SER_YUV444)) emit enableYUV444Changed();
     if (changed(SER_VIDEOCFG)) emit videoCodecConfigChanged();

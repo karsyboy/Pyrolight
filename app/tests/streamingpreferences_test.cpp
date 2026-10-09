@@ -180,6 +180,7 @@ private slots:
         m_Preferences->videoDecoderSelection = StreamingPreferences::VDS_FORCE_HARDWARE;
         m_Preferences->rendererSelection = StreamingPreferences::RS_VULKAN;
         m_Preferences->audioConfig = StreamingPreferences::AC_71_SURROUND;
+        m_Preferences->audioQuality = StreamingPreferences::AQ_MAXIMUM;
         m_Preferences->enableVsync = false;
         m_Preferences->framePacing = true;
         m_Preferences->gameOptimizations = false;
@@ -192,6 +193,7 @@ private slots:
 
         QVERIFY(m_Preferences->activateProfile(QStringLiteral("default")));
         QCOMPARE(m_Preferences->width, 1920);
+        QCOMPARE(m_Preferences->audioQuality, StreamingPreferences::AQ_HOST_DEFAULT);
         QVERIFY(m_Preferences->activateProfile(desktopId));
         QCOMPARE(m_Preferences->width, 3840);
         QCOMPARE(m_Preferences->height, 2160);
@@ -205,6 +207,7 @@ private slots:
         QCOMPARE(m_Preferences->videoDecoderSelection, StreamingPreferences::VDS_FORCE_HARDWARE);
         QCOMPARE(m_Preferences->rendererSelection, StreamingPreferences::RS_VULKAN);
         QCOMPARE(m_Preferences->audioConfig, StreamingPreferences::AC_71_SURROUND);
+        QCOMPARE(m_Preferences->audioQuality, StreamingPreferences::AQ_MAXIMUM);
         QVERIFY(!m_Preferences->enableVsync);
         QVERIFY(m_Preferences->framePacing);
         QVERIFY(!m_Preferences->gameOptimizations);

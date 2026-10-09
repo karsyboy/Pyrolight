@@ -69,6 +69,7 @@ private:
     QString m_AppName;
     QMap<QString, StreamingPreferences::WindowMode> m_WindowModeMap;
     QMap<QString, StreamingPreferences::AudioConfig> m_AudioConfigMap;
+    QMap<QString, StreamingPreferences::AudioQuality> m_AudioQualityMap;
     QMap<QString, StreamingPreferences::VideoCodecConfig> m_VideoCodecMap;
     QMap<QString, StreamingPreferences::VideoDecoderSelection> m_VideoDecoderMap;
     QMap<QString, StreamingPreferences::CaptureSysKeysMode> m_CaptureSysKeysModeMap;

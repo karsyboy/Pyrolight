@@ -34,6 +34,7 @@ Flickable {
         fpsComboBox.reinitialize()
         windowModeComboBox.reinitialize()
         selectModelValue(audioComboBox, audioListModel, StreamingPreferences.audioConfig)
+        selectModelValue(audioQualityComboBox, audioQualityListModel, StreamingPreferences.audioQuality)
         selectModelValue(decoderComboBox, decoderListModel, StreamingPreferences.videoDecoderSelection)
         selectModelValue(codecComboBox, codecListModel, StreamingPreferences.videoCodecConfig)
         selectModelValue(rendererComboBox, rendererListModel, StreamingPreferences.rendererSelection)
@@ -1271,6 +1272,53 @@ Flickable {
                     onActivated : {
                         StreamingPreferences.audioConfig = audioListModel.get(currentIndex).val
                     }
+                }
+
+                Label {
+                    width: parent.width
+                    id: audioQualityTitle
+                    text: qsTr("Audio quality")
+                    font.pointSize: 12
+                    wrapMode: Text.Wrap
+                }
+
+                AutoResizingComboBox {
+                    // ignore setting the index at first, and actually set it when the component is loaded
+                    Component.onCompleted: {
+                        settingsPage.selectModelValue(audioQualityComboBox, audioQualityListModel,
+                                                      StreamingPreferences.audioQuality)
+                    }
+
+                    id: audioQualityComboBox
+                    textRole: "text"
+                    model: ListModel {
+                        id: audioQualityListModel
+                        ListElement {
+                            text: qsTr("Host default")
+                            val: StreamingPreferences.AQ_HOST_DEFAULT
+                        }
+                        ListElement {
+                            text: qsTr("Standard")
+                            val: StreamingPreferences.AQ_STANDARD
+                        }
+                        ListElement {
+                            text: qsTr("High")
+                            val: StreamingPreferences.AQ_HIGH
+                        }
+                        ListElement {
+                            text: qsTr("Maximum")
+                            val: StreamingPreferences.AQ_MAXIMUM
+                        }
+                    }
+                    // ::onActivated must be used, as it only listens for when the index is changed by a human
+                    onActivated : {
+                        StreamingPreferences.audioQuality = audioQualityListModel.get(currentIndex).val
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 8000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Pyroshine hosts stream stereo at 96 kbps (Standard), 256 kbps (High) or 512 kbps (Maximum), with higher surround bitrates. High and Maximum also request high-quality surround sound from any host. Host default uses the host's setting.")
                 }
 
 

@@ -54,6 +54,17 @@ public:
     };
     Q_ENUM(AudioConfig)
 
+    // Values match moonlight-common-c's AUDIO_QUALITY_*. Pyroshine hosts raise
+    // the Opus bitrate; High and Maximum also request high-quality surround.
+    enum AudioQuality
+    {
+        AQ_HOST_DEFAULT,
+        AQ_STANDARD,
+        AQ_HIGH,
+        AQ_MAXIMUM
+    };
+    Q_ENUM(AudioQuality)
+
     enum VideoCodecConfig
     {
         VCC_AUTO,
@@ -170,6 +181,7 @@ public:
     Q_PROPERTY(bool detectNetworkBlocking MEMBER detectNetworkBlocking NOTIFY detectNetworkBlockingChanged)
     Q_PROPERTY(bool showPerformanceOverlay MEMBER showPerformanceOverlay NOTIFY showPerformanceOverlayChanged)
     Q_PROPERTY(AudioConfig audioConfig MEMBER audioConfig NOTIFY audioConfigChanged)
+    Q_PROPERTY(AudioQuality audioQuality MEMBER audioQuality NOTIFY audioQualityChanged)
     Q_PROPERTY(VideoCodecConfig videoCodecConfig MEMBER videoCodecConfig NOTIFY videoCodecConfigChanged)
     Q_PROPERTY(bool enableHdr MEMBER enableHdr NOTIFY enableHdrChanged)
     Q_PROPERTY(bool enableYUV444 MEMBER enableYUV444 NOTIFY enableYUV444Changed)
@@ -253,6 +265,7 @@ public:
     bool keepAwake;
     int packetSize;
     AudioConfig audioConfig;
+    AudioQuality audioQuality;
     VideoCodecConfig videoCodecConfig;
     bool enableHdr;
     bool enableYUV444;
@@ -285,6 +298,7 @@ signals:
     void absoluteMouseModeChanged();
     void absoluteTouchModeChanged();
     void audioConfigChanged();
+    void audioQualityChanged();
     void videoCodecConfigChanged();
     void enableHdrChanged();
     void enableYUV444Changed();
