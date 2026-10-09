@@ -23,6 +23,7 @@ Moonlight's standard codecs and features and adds an explicitly selected
   Advanced Settings → Display backend** shows which one is in use; see
   [Linux display backends](docs/LINUX_DISPLAY.md).
 - Native model metadata for Xbox Elite, classic Steam Controller, Steam Deck and DualSense Edge on matching Pyroshine hosts; see [controller support and limits](docs/NATIVE_CONTROLLERS.md).
+- Improved audio quality selection when using with a pyroshine host.
 
 PyroWave is an intra-only wavelet codec with very low GPU encode and decode
 latency, designed for high-bandwidth local networks. It is never selected
