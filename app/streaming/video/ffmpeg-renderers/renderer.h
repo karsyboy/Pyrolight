@@ -563,7 +563,7 @@ public:
 #endif
 
 protected:
-    InitFailureReason m_InitFailureReason;
+    InitFailureReason m_InitFailureReason = InitFailureReason::Unknown;
 
 private:
     RendererType m_Type;
