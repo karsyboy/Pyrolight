@@ -610,11 +610,15 @@ macx {
 
 CI_VERSION = $$(CI_VERSION)
 isEmpty(CI_VERSION) {
-    VERSION = "$$cat(version.txt)"
+    FULL_VERSION = "$$cat(version.txt)"
 } else {
-    VERSION = "$$CI_VERSION"
+    FULL_VERSION = "$$CI_VERSION"
 }
-DEFINES += VERSION_STR=\\\"$$VERSION\\\"
+# The UI shows the full version (6.2.8-prerelease.1). qmake writes VERSION into
+# the Windows VERSIONINFO resource, which the MSI takes its version from, and
+# both accept only numbers, so VERSION drops a prerelease suffix.
+VERSION = $$section(FULL_VERSION, -, 0, 0)
+DEFINES += VERSION_STR=\\\"$$FULL_VERSION\\\"
 
 # Explicit opt-in, reproducible standalone dependency (see docs/PYROWAVE.md).
 enable-pyrowave {

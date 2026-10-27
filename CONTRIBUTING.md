@@ -96,15 +96,17 @@ See [Linux packages](docs/LINUX_PACKAGES.md).
 ### Pacman repository
 
 The [`[pyrowave]` pacman repository](https://github.com/karsyboy/pyrowave-packages) publishes
-`pyrolight-bin`, which repackages the release's Arch package. After a release
-is published, the release workflow's `pacman` job starts that repository's
-**Publish** workflow, so a release needs no further step. The job needs the
+`pyrolight-bin`, which repackages the newest stable release's Arch package, and
+`pyrolight-prerelease-bin`, which follows the newest release including
+prereleases. After a release or prerelease is published, the release workflow's
+`pacman` job starts that repository's **Publish** workflow, so a release needs
+no further step. The job needs the
 `PACKAGES_DISPATCH_TOKEN` secret: a fine-grained token with access to
 `pyrowave-packages` only and the **Actions: Read and write** permission. If the
 job fails, run **Publish** in `pyrowave-packages` by hand.
 
 When changing the `archlinux` dependencies in `app/deploy/linux/nfpm.yaml`,
-update the PKGBUILD there to match.
+update both PKGBUILDs there to match.
 
 ### Windows x64
 
@@ -257,3 +259,22 @@ tagged revision, builds the Windows installer and portable ZIP and the
 Linux AppImage against the pinned PyroWave revision, verifies the PyroWave
 runtime is bundled, and, only after the tests pass, publishes a GitHub Release
 with `SHA256SUMS` and generated notes. Test installation of each asset afterwards.
+
+### Prereleases
+
+Prerelease tags take the form `vMAJOR.MINOR.PATCH-prerelease` or
+`vMAJOR.MINOR.PATCH-prerelease.N` (no `.BUILD` component). Set
+`app/version.txt` to the same version, for example `6.2.8-prerelease`:
+
+```sh
+git tag -a v6.2.8-prerelease -m "Pyrolight v6.2.8-prerelease"
+git push origin v6.2.8-prerelease
+```
+
+The [prerelease workflow](.github/workflows/prerelease.yml) runs the release
+workflow for these tags (the release workflow itself ignores them) and marks
+the GitHub release as a prerelease. The Linux packages carry the version in
+each format's prerelease form (`6.2.8~prerelease` for deb/rpm,
+`6.2.8prerelease` for pacman), so the release that follows upgrades them. Windows
+version resources hold only the numeric part (`6.2.8`); the installer upgrades a
+prerelease of the same version.

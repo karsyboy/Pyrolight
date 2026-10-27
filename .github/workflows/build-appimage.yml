@@ -9,7 +9,7 @@ on:
         required: true
         type: string
       release_version:
-        description: Numeric application version derived from the tag (for example, 1.0.0)
+        description: Application version derived from the tag (for example, 1.0.0 or 1.0.0-prerelease.1)
         required: true
         type: string
 
