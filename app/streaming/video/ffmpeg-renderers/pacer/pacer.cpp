@@ -303,6 +303,7 @@ bool Pacer::initialize(SDL_Window* window, int maxVideoFps, bool enablePacing,
             config.reduceJudder = vrr->reduceJudder;
             config.protection = protection;
             m_VrrWorker = std::make_unique<Vrr::PacingWorker>(config, presenter, vrrClock);
+            m_VrrWorker->setStopStallReporter(Vrr::logStopStall);
             if (m_VrrWorker->start([] {
                     if (SDL_SetThreadPriority(SDL_THREAD_PRIORITY_TIME_CRITICAL) < 0) {
                         SDL_SetThreadPriority(SDL_THREAD_PRIORITY_HIGH);

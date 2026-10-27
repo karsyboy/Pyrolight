@@ -126,6 +126,13 @@ public:
         return m_OverlayManager;
     }
 
+    // Color range requested from the host (COLOR_RANGE_*), which encodes
+    // with it; COLOR_RANGE_OVERRIDE can change it from the decoder's choice.
+    int getNegotiatedColorRange() const
+    {
+        return m_StreamConfig.colorRange;
+    }
+
     void flushWindowEvents();
 
     void setShouldExit(bool quitHostApp = false);

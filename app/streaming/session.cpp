@@ -2450,13 +2450,14 @@ void Session::exec()
                     enableVsync = false;
                 }
 
-                // Requalify VRR for the window's current display: a renderer
-                // recreated after a display change must not keep the old
-                // display's refresh rate.
-                VRR_PARAMETERS vrr = {};
-                if (m_Vrr.enabled) {
-                    vrr = qualifyVrr(SDL_GetWindowDisplayIndex(m_Window), m_VrrFallbackReason);
-                }
+                // Requalify the VRR request for the window's current display:
+                // a renderer recreated after a display change must not keep the
+                // old display's refresh rate, and a request rejected on the
+                // launch display (unknown or too low a refresh rate) qualifies
+                // once the window reaches a suitable one. The host's capture
+                // mode stays what was negotiated at launch; client pacing
+                // works against either.
+                VRR_PARAMETERS vrr = qualifyVrr(SDL_GetWindowDisplayIndex(m_Window), m_VrrFallbackReason);
 
                 // Choose a new decoder (hopefully the same one, but possibly
                 // not if a GPU was removed or something). A VRR request that

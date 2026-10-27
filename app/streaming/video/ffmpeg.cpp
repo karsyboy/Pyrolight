@@ -1971,9 +1971,11 @@ void FFmpegVideoDecoder::decoderThreadProc()
                     }
 
                     // Some decoders don't propagate color metadata from the bitstream,
-                    // so we will try to guess it here if it was unset.
+                    // so we will try to guess it here if it was unset. The host
+                    // encodes with the negotiated range, which COLOR_RANGE_OVERRIDE
+                    // may have changed from the renderer's preference.
                     if (frame->color_range == AVCOL_RANGE_UNSPECIFIED) {
-                        switch (getDecoderColorRange()) {
+                        switch (Session::get() ? Session::get()->getNegotiatedColorRange() : getDecoderColorRange()) {
                         case COLOR_RANGE_LIMITED:
                             frame->color_range = AVCOL_RANGE_MPEG;
                             break;
