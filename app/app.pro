@@ -627,7 +627,7 @@ enable-pyrowave {
         INCLUDEPATH += $$PYROWAVE_PREFIX/include
         LIBS += -L$$PYROWAVE_PREFIX/lib -lpyrowave-shared
     } else:linux {
-        !packagesExist("pyrowave-shared = 1.1.0"): error("PyroWave requires the karsyboy/pyrowave fork API 1.1.0")
+        !packagesExist("pyrowave-shared = 1.1.0"): error("PyroWave requires the C API 1.1.0 of Pyroshine's vendor/pyrowave")
         PKGCONFIG += pyrowave-shared
         INCLUDEPATH += $$system(pkg-config --variable=prefix pyrowave-shared)/include
     } else {

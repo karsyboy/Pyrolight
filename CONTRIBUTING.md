@@ -21,21 +21,24 @@ cd pyrolight
 
 ### PyroWave dependency
 
-PyroWave support requires the fork's C API from the pinned
-[`karsyboy/pyrowave`](https://github.com/karsyboy/pyrowave) revision:
+PyroWave support requires the C API 1.1 that Pyroshine's patch series adds to
+[upstream PyroWave](https://github.com/Themaister/pyrowave). Build it from the
+`vendor/pyrowave` tree of the pinned [Pyroshine](https://github.com/karsyboy/pyroshine) commit:
 
 | Item | Value |
 | --- | --- |
-| Revision | `ac5a7ec4b7a326ec8d3230ab8b2e884417799060` |
+| Pyroshine commit | `4f1a90b0cc6d2d58663ee29c8a3b8a80e55f3cc2` |
 | C API | `pyrowave-shared` 1.1.0 (checked by `app/app.pro`) |
 | Granite | `53090429539bf3404250d18fe58db971f0907c04`, from `checkout_granite.sh` |
 
-Do not substitute upstream PyroWave or another ABI. Build and install it
-without the development applications:
+Do not substitute unpatched upstream PyroWave or another ABI. Build and install
+it without the development applications:
 
 ```sh
-git clone https://github.com/karsyboy/pyrowave.git deps/PyroWave
-git -C deps/PyroWave checkout ac5a7ec4b7a326ec8d3230ab8b2e884417799060
+git clone --filter=blob:none --no-checkout https://github.com/karsyboy/pyroshine.git deps/pyroshine
+git -C deps/pyroshine sparse-checkout set vendor/pyrowave
+git -C deps/pyroshine checkout 4f1a90b0cc6d2d58663ee29c8a3b8a80e55f3cc2
+cp -a deps/pyroshine/vendor/pyrowave deps/PyroWave
 (cd deps/PyroWave && ./checkout_granite.sh)
 cmake -S deps/PyroWave -B build/pyrowave \
   -DCMAKE_BUILD_TYPE=Release \
@@ -45,7 +48,7 @@ cmake --build build/pyrowave --parallel
 cmake --install build/pyrowave
 ```
 
-The fork carries full-resolution 4:4:4 payload allocation and 200-nit
+The patch series carries full-resolution 4:4:4 payload allocation and 200-nit
 normalization when converting PQ/scRGB into SDR; `checkout_granite.sh` applies
 its Granite patches. The Pyroshine host pins a newer revision of the same fork; the
 two pins need not match, but the client must decode the host's block-format

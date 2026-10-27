@@ -10,7 +10,7 @@
 Pyrolight is a game-streaming client based on
 [Moonlight Qt](https://github.com/moonlight-stream/moonlight-qt). It keeps
 Moonlight's standard codecs and features and adds an explicitly selected
-[PyroWave](https://github.com/karsyboy/pyrowave) video path for
+[PyroWave](https://github.com/Themaister/pyrowave) video path for
 [Pyroshine](https://github.com/karsyboy/pyroshine) hosts.
 
 - PyroWave decoding on the GPU in 4:2:0 and 4:4:4, SDR and HDR10.
@@ -209,8 +209,8 @@ Moonlight or PyroWave project. It periodically merges upstream client changes.
 Its `moonlight-common-c` submodule points to the
 [`karsyboy/moonlight-common-c`](https://github.com/karsyboy/moonlight-common-c)
 fork, which carries the PyroWave and controller protocol extensions. The codec
-is the pinned [`karsyboy/pyrowave`](https://github.com/karsyboy/pyrowave) fork
-of [Themaister's PyroWave](https://github.com/Themaister/pyrowave).
+is [Themaister's PyroWave](https://github.com/Themaister/pyrowave) with
+Pyroshine's patch series, built from Pyroshine's `vendor/pyrowave` tree.
 
 VRR presentation is based on [Nonary](https://github.com/Nonary)'s idea and
 reference implementations in

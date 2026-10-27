@@ -122,22 +122,22 @@ live network rate controller.
 
 | Item | Value |
 | --- | --- |
-| Source | [`karsyboy/pyrowave`](https://github.com/karsyboy/pyrowave) at `ac5a7ec4b7a326ec8d3230ab8b2e884417799060` |
+| Source | `vendor/pyrowave` of [`karsyboy/pyroshine`](https://github.com/karsyboy/pyroshine) at `4f1a90b0cc6d2d58663ee29c8a3b8a80e55f3cc2` ([upstream PyroWave](https://github.com/Themaister/pyrowave) plus `vendor/pyrowave-patches/`) |
 | C API | `pyrowave-shared` 1.1.0; `app/app.pro` rejects other versions |
 | Granite | `53090429539bf3404250d18fe58db971f0907c04` via `checkout_granite.sh` |
 | Bitstream family | `186f0393` |
 
 The pin appears in [build-appimage.yml](../.github/workflows/build-appimage.yml),
 [release.yml](../.github/workflows/release.yml) and the build instructions; keep
-them identical. Both workflows and `scripts/build-pyrowave-appimage.sh` run the fork's
+them identical. Both workflows and `scripts/build-pyrowave-appimage.sh` run the vendored
 `checkout_granite.sh`, which applies its Granite patches, and the release workflows fail unless the packaged client links and
 bundles the PyroWave runtime and its license.
 
-The Pyroshine host pins a newer revision of the same fork with a different C
-API version. Host and client pins may differ as long as they share the
-block-format family; the golden-bitstream tests decode fixtures produced by
-both forks. When changing the pin, rerun those tests and the smoke test, and do
-not substitute upstream PyroWave 0.6 or an arbitrary newer ABI.
+The Pyroshine host may build a newer base or patch series than this pin. Host
+and client may differ as long as they share the block-format family; the
+golden-bitstream tests decode fixtures produced by both. When changing the pin,
+rerun those tests and the smoke test, and do not substitute unpatched upstream
+PyroWave or an arbitrary newer ABI.
 
 ## Renderer smoke test
 

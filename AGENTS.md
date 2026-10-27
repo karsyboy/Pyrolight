@@ -16,7 +16,8 @@ Related repositories:
 - [`karsyboy/moonlight-common-c`](https://github.com/karsyboy/moonlight-common-c):
   the protocol library fork used as the `moonlight-common-c/moonlight-common-c`
   submodule.
-- [`karsyboy/pyrowave`](https://github.com/karsyboy/pyrowave): the pinned codec fork.
+- [`Themaister/pyrowave`](https://github.com/Themaister/pyrowave): the codec, built from
+  Pyroshine's `vendor/pyrowave` (upstream plus a numbered patch series).
 
 ## Working approach
 
@@ -117,10 +118,11 @@ Everything else under `app/` is upstream Moonlight code.
   compatible with upstream-style hosts (Sunshine, GameStream) for standard
   codecs. Capability bits and SDP attributes are shared contracts; change them
   only together with the host and common-c.
-- The PyroWave pin (`ac5a7ec`, C API 1.1.0) appears in every workflow,
+- The PyroWave pin is a Pyroshine commit (`4f1a90b`, C API 1.1.0) whose
+  `vendor/pyrowave` every workflow builds; it appears in every workflow,
   `CONTRIBUTING.md` and `docs/PYROWAVE.md`; keep them identical (CI checks).
-  The fork carries its own patches. The host may pin a newer revision of the
-  same fork; the bitstream family (`186f0393`) must stay decodable.
+  Change PyroWave only through Pyroshine's `vendor/pyrowave-patches/`. The host
+  may build a newer series; the bitstream family (`186f0393`) must stay decodable.
 - Fork code must compile on Windows (MSVC, `min`/`max` macros) and Linux; tests
   include a Windows-macro build of the frame rules.
 - Changes in `moonlight-common-c` are made in the `karsyboy/moonlight-common-c`
