@@ -270,10 +270,21 @@ NvHTTP::startApp(QString verb,
 void
 NvHTTP::quitApp(int expectedAppId)
 {
+    QString arguments;
+    if (expectedAppId != 0) {
+        // Hosts that do not advertise the check ignore expectedAppId and stop
+        // whatever is running, so a conditional quit must never reach them.
+        if (getXmlString(getServerInfo(NvHTTP::NVLL_ERROR), "PyroshineConditionalCancel").toInt() < 1) {
+            throw GfeHttpResponseException(501, "This host cannot end only the expected game. "
+                                                "Update Pyroshine on the host; no game was ended.");
+        }
+        arguments = "expectedAppId=" + QString::number(expectedAppId);
+    }
+
     QString response =
             openConnectionToString(m_BaseUrlHttps,
                                    "cancel",
-                                   expectedAppId == 0 ? QString() : "expectedAppId=" + QString::number(expectedAppId),
+                                   arguments,
                                    QUIT_TIMEOUT_MS);
 
     qInfo() << "Quit response:" << response;
