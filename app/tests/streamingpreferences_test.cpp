@@ -141,6 +141,28 @@ private slots:
         QVERIFY(!m_Preferences->integrationRequest(request).value("ok").toBool());
         request["values"] = QJsonObject{{"recommendedFullScreenMode", 2}};
         QVERIFY(!m_Preferences->integrationRequest(request).value("ok").toBool());
+
+        // Clients such as PyroDeck show the microphone settings under Audio,
+        // echo cancellation only with the microphone on.
+        for (const auto& value : m_Preferences->integrationSnapshot().value("registry").toArray()) {
+            const auto descriptor = value.toObject();
+            const QString key = descriptor.value("key").toString();
+            if (key == "enableMicrophone" || key == "micEchoCancel") {
+                QCOMPARE(descriptor.value("category").toString(), QStringLiteral("Audio"));
+                QCOMPARE(descriptor.value("scope").toString(), QStringLiteral("profile"));
+            }
+            if (key == "micEchoCancel") {
+                QCOMPARE(descriptor.value("requires").toString(), QStringLiteral("enableMicrophone"));
+                QCOMPARE(descriptor.value("choices").toArray().size(), 3);
+            }
+        }
+        request["revision"] = m_Preferences->integrationSnapshot().value("revision");
+        request["values"] = QJsonObject{{"micEchoCancel", 3}};
+        QVERIFY(!m_Preferences->integrationRequest(request).value("ok").toBool());
+        request["values"] = QJsonObject{{"enableMicrophone", true}, {"micEchoCancel", 2}};
+        QVERIFY(m_Preferences->integrationRequest(request).value("ok").toBool());
+        QVERIFY(m_Preferences->enableMicrophone);
+        QCOMPARE(m_Preferences->micEchoCancel, StreamingPreferences::MEC_OFF);
     }
 
     void freshInstallCreatesDefault()

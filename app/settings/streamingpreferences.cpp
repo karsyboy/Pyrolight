@@ -1120,6 +1120,7 @@ QJsonObject StreamingPreferences::integrationSnapshot() const
             QJsonObject{{"value", 1}, {"label", "Balanced"}, {"supported", true}},
             QJsonObject{{"value", 2}, {"label", "Lowest latency"}, {"supported", true}}};
         if (name.startsWith("vrr") || name == "smoothVrrFrameTiming") descriptor["requires"] = "enableVrr";
+        if (name == "micEchoCancel") descriptor["requires"] = "enableMicrophone";
         if (name == "bitrateKbps") descriptor["disabledWhen"] = "autoAdjustBitrate";
         registry.append(descriptor);
     }
