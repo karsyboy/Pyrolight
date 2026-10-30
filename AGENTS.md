@@ -69,6 +69,7 @@ Everything else under `app/` is upstream Moonlight code.
 | Linux distribution packages, dependencies, icon name | `docs/LINUX_PACKAGES.md` |
 | Common-c protocol extension | `moonlight-common-c/moonlight-common-c/docs/pyrowave.md` |
 | Audio quality request (`x-moonshine-audio.quality`) | `moonlight-common-c/moonlight-common-c/docs/audio-quality.md` |
+| Client microphone (Apollo's `streamid=mic`, as Nightjar sends it) | `moonlight-common-c/moonlight-common-c/docs/microphone.md`; capture in `app/streaming/audio/microphone.*` |
 | Host-side protocol and probe | Pyroshine `docs/PYROWAVE.md`, `docs/PYROWAVE_COMPATIBILITY.md`, `docs/DUALSENSE_EDGE.md` |
 | Controller input ownership and Steam menus | `docs/CONTROLLER_INPUT_OWNERSHIP.md` |
 | General Moonlight behavior | Upstream code and the [Moonlight wiki](https://github.com/moonlight-stream/moonlight-docs/wiki) |
@@ -141,7 +142,7 @@ ctest --test-dir build/tests --output-on-failure
 ```
 
 - Protocol or framing changes: also run common-c's suite with
-  `-DPYROWAVE_PROTOCOL_TESTS=ON -DCONTROLLER_PROTOCOL_TESTS=ON -DAUDIO_QUALITY_TESTS=ON`.
+  `-DPYROWAVE_PROTOCOL_TESTS=ON -DCONTROLLER_PROTOCOL_TESTS=ON -DAUDIO_QUALITY_TESTS=ON -DMICROPHONE_TESTS=ON`.
 - Preferences or profile changes: run `app/tests/streamingpreferences_test.pro` and `app/tests/settingsapi_test.pro`.
 - Decoder or renderer changes: build with `CONFIG+=enable-pyrowave` and run the
   renderer smoke test on a Vulkan-capable display.

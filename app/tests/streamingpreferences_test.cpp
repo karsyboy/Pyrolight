@@ -292,6 +292,8 @@ private slots:
         m_Preferences->playAudioOnHost = true;
         m_Preferences->showPerformanceOverlay = true;
         m_Preferences->muteOnFocusLoss = true;
+        m_Preferences->enableMicrophone = true;
+        m_Preferences->micEchoCancel = StreamingPreferences::MEC_OFF;
         m_Preferences->windowMode = StreamingPreferences::WM_WINDOWED;
         m_Preferences->packetSize = 1392;
         m_Preferences->save();
@@ -299,6 +301,9 @@ private slots:
         QVERIFY(m_Preferences->activateProfile(QStringLiteral("default")));
         QCOMPARE(m_Preferences->width, 1920);
         QCOMPARE(m_Preferences->audioQuality, StreamingPreferences::AQ_HOST_DEFAULT);
+        // The microphone is off until the user turns it on.
+        QVERIFY(!m_Preferences->enableMicrophone);
+        QCOMPARE(m_Preferences->micEchoCancel, StreamingPreferences::MEC_AUTO);
         QVERIFY(m_Preferences->activateProfile(desktopId));
         QCOMPARE(m_Preferences->width, 3840);
         QCOMPARE(m_Preferences->height, 2160);
@@ -319,6 +324,8 @@ private slots:
         QVERIFY(m_Preferences->playAudioOnHost);
         QVERIFY(m_Preferences->showPerformanceOverlay);
         QVERIFY(m_Preferences->muteOnFocusLoss);
+        QVERIFY(m_Preferences->enableMicrophone);
+        QCOMPARE(m_Preferences->micEchoCancel, StreamingPreferences::MEC_OFF);
         QCOMPARE(m_Preferences->windowMode, StreamingPreferences::WM_WINDOWED);
         QCOMPARE(m_Preferences->packetSize, 1392);
         QVERIFY(!m_Preferences->enableMdns);

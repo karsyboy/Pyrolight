@@ -218,6 +218,7 @@ void Session::clConnectionStatusUpdate(int connectionStatus)
         break;
     case CONN_STATUS_OKAY:
         s_ActiveSession->m_OverlayManager.setOverlayState(Overlay::OverlayStatusUpdate, false);
+        s_ActiveSession->updateMicrophoneStatus();
         break;
     }
 }
@@ -620,6 +621,8 @@ Session::Session(NvComputer* computer, NvApp& app, StreamingPreferences *prefere
       m_UnexpectedTermination(true), // Failure prior to streaming is unexpected
       m_InputHandler(nullptr),
       m_MouseEmulationRefCount(0),
+      m_MicrophoneMuted(false),
+      m_MicrophoneStatusShown(false),
       m_FlushingWindowEventsRef(0),
       m_ShouldExit(false),
       m_AsyncConnectionSuccess(false),
@@ -787,6 +790,9 @@ bool Session::initialize(QQuickWindow* qtWindow)
         m_StreamConfig.audioQuality = AUDIO_QUALITY_MAXIMUM;
         break;
     }
+
+    // Set up the host's microphone stream; sending starts with the stream.
+    m_StreamConfig.enableMic = m_Preferences->enableMicrophone;
 
     LiInitializeAudioCallbacks(&m_AudioCallbacks);
     m_AudioCallbacks.init = arInit;
@@ -1730,6 +1736,77 @@ void Session::notifyMouseEmulationMode(bool enabled)
     }
     else {
         m_OverlayManager.setOverlayState(Overlay::OverlayStatusUpdate, false);
+        updateMicrophoneStatus();
+    }
+}
+
+void Session::startMicrophone()
+{
+    if (!m_Preferences->enableMicrophone || m_MicrophoneMuted || m_Microphone.isRunning()) {
+        return;
+    }
+    if (!LiIsMicrophoneStreamActive()) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "Microphone: the host did not set up an encrypted microphone stream");
+        return;
+    }
+
+    MicrophoneStream::EchoCancellation echo = MicrophoneStream::EchoCancellation::Automatic;
+    switch (m_Preferences->micEchoCancel) {
+    case StreamingPreferences::MEC_AUTO:
+        echo = MicrophoneStream::EchoCancellation::Automatic;
+        break;
+    case StreamingPreferences::MEC_ON:
+        echo = MicrophoneStream::EchoCancellation::On;
+        break;
+    case StreamingPreferences::MEC_OFF:
+        echo = MicrophoneStream::EchoCancellation::Off;
+        break;
+    }
+    if (m_Microphone.start(echo)) {
+        m_MicrophoneStatus.clear();
+    }
+    else {
+        // Muted until the user tries again with the shortcut.
+        m_MicrophoneMuted = true;
+        m_MicrophoneStatus = tr("Microphone unavailable: %1").arg(m_Microphone.error());
+    }
+    updateMicrophoneStatus();
+}
+
+void Session::toggleMicrophone()
+{
+    if (!m_Preferences->enableMicrophone || !LiIsMicrophoneStreamActive()) {
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                    "Microphone: not available in this stream");
+        return;
+    }
+    m_MicrophoneMuted = !m_MicrophoneMuted;
+    if (m_MicrophoneMuted) {
+        m_Microphone.stop();
+        m_MicrophoneStatus = tr("Microphone muted");
+        updateMicrophoneStatus();
+    }
+    else {
+        startMicrophone();
+    }
+}
+
+void Session::updateMicrophoneStatus()
+{
+    // Mouse emulation owns the status overlay while it is active.
+    if (m_MouseEmulationRefCount > 0) {
+        return;
+    }
+    if (m_MicrophoneMuted && !m_MicrophoneStatus.isEmpty()) {
+        m_OverlayManager.updateOverlayText(Overlay::OverlayStatusUpdate,
+                                           qPrintable(tr("%1\nPress Ctrl+Alt+Shift+U to unmute").arg(m_MicrophoneStatus)));
+        m_OverlayManager.setOverlayState(Overlay::OverlayStatusUpdate, true);
+        m_MicrophoneStatusShown = true;
+    }
+    else if (m_MicrophoneStatusShown) {
+        m_OverlayManager.setOverlayState(Overlay::OverlayStatusUpdate, false);
+        m_MicrophoneStatusShown = false;
     }
 }
 
@@ -2192,6 +2269,9 @@ void Session::exec()
     // Toggle the stats overlay if requested by the user
     m_OverlayManager.setOverlayState(Overlay::OverlayDebug, m_Preferences->showPerformanceOverlay);
 
+    // Start sending the microphone now that the stream is up
+    startMicrophone();
+
     // Switch to async logging mode when we enter the SDL loop
     StreamUtils::enterAsyncLoggingMode();
 
@@ -2239,6 +2319,17 @@ void Session::exec()
             SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                         "Quit event received");
             goto DispatchDeferredCleanup;
+
+        case SDL_AUDIODEVICEREMOVED:
+            // A lost microphone mutes it; the shortcut tries again.
+            if (event.adevice.iscapture && m_Microphone.isDevice(event.adevice.which)) {
+                SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Microphone: the capture device was removed");
+                m_Microphone.stop();
+                m_MicrophoneMuted = true;
+                m_MicrophoneStatus = tr("Microphone disconnected");
+                updateMicrophoneStatus();
+            }
+            break;
 
         case SDL_USEREVENT:
             switch (event.user.code) {
@@ -2577,6 +2668,9 @@ DispatchDeferredCleanup:
     if (QGuiApplication::platformName() == "eglfs") {
         QGuiApplication::restoreOverrideCursor();
     }
+
+    // Stop sending the microphone before the connection goes away
+    m_Microphone.stop();
 
     // Raise any keys that are still down
     m_InputHandler->raiseAllKeys();

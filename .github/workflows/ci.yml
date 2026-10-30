@@ -81,7 +81,8 @@ jobs:
       - name: Build and run
         run: |
           cmake -S moonlight-common-c/moonlight-common-c -B build/common-c-tests \
-            -DPYROWAVE_PROTOCOL_TESTS=ON -DCONTROLLER_PROTOCOL_TESTS=ON -DAUDIO_QUALITY_TESTS=ON
+            -DPYROWAVE_PROTOCOL_TESTS=ON -DCONTROLLER_PROTOCOL_TESTS=ON -DAUDIO_QUALITY_TESTS=ON \
+            -DMICROPHONE_TESTS=ON
           cmake --build build/common-c-tests --parallel
           ctest --test-dir build/common-c-tests --output-on-failure
 

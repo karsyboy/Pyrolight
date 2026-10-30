@@ -23,6 +23,8 @@ from your Steam library.
 - Named streaming profiles for switching between sets of stream settings.
 - Selectable audio quality with Pyroshine hosts, including higher-bitrate
   stereo and surround sound.
+- [Microphone](#microphone) for games and chat on the host, with Pyroshine,
+  Rubylight and Apollo hosts.
 - Native model support for Xbox Elite, classic Steam Controller, Steam Deck,
   and DualSense Edge with matching Pyroshine hosts; see
   [controller support and limits](docs/NATIVE_CONTROLLERS.md).
@@ -142,6 +144,28 @@ codec. On a Pyroshine host:
 **Maximum** request high-quality surround sound even below the 15 Mbps video
 bitrate Moonlight otherwise requires; other settings use Moonlight's usual
 audio.
+
+## Microphone
+
+Turn on **Send microphone to the host** in Settings (or `--microphone`) to talk
+in games and chat apps on the host. Pyrolight sends your default microphone,
+encrypted, to hosts that offer a microphone stream: Pyroshine, Rubylight and
+Apollo, the same stream Nightjar uses. Other hosts stream normally without it.
+
+While streaming, **Ctrl+Alt+Shift+U** mutes and unmutes it; the stream shows
+**Microphone muted** while it is off. Muting closes the microphone, so the
+system's recording indicator shows exactly when it is in use. A microphone that
+is unplugged mutes itself; the shortcut tries it again.
+
+**Microphone echo cancellation** keeps the host's sound, played from your
+speakers, out of the microphone. **Automatic** and **On** record from the
+system's echo-cancelled microphone when there is one: on Linux, load PipeWire's
+`libpipewire-module-echo-cancel` or PulseAudio's `module-echo-cancel`. **Off**
+sends the default microphone as it is, which suits headphones.
+
+On a Pyroshine host, games and apps in Game Mode use the microphone as their
+default input; in Desktop Mode select **Pyroshine client microphone** as the
+input.
 
 ## Streaming profiles
 

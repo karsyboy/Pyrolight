@@ -199,6 +199,7 @@ SOURCES += \
     streaming/input/reltouch.cpp \
     streaming/session.cpp \
     streaming/audio/audio.cpp \
+    streaming/audio/microphone.cpp \
     streaming/audio/renderers/sdlaud.cpp \
     gui/computermodel.cpp \
     gui/appmodel.cpp \
@@ -249,6 +250,7 @@ HEADERS += \
     streaming/input/gamepadidentity.h \
     streaming/input/gamepadfeedback.h \
     streaming/session.h \
+    streaming/audio/microphone.h \
     streaming/audio/renderers/renderer.h \
     streaming/audio/renderers/sdl.h \
     gui/computermodel.h \
