@@ -63,7 +63,11 @@ common-c reassembly ─▶ submitDecodeUnit ─▶ single-slot mailbox ─▶ re
   avoiding steady-state per-frame allocation.
 - **Loss.** Native whole-frame FEC is used; incomplete native frames are dropped,
   and the next frame resumes decoding without an IDR request because every frame
-  is intra-coded.
+  is intra-coded. With a host that offers it (Pyroshine), the FEC block layout
+  is extended from four to sixteen Reed-Solomon blocks per frame, so frames
+  above about 1.1 Gb/s at 120 FPS keep the host's configured parity instead of
+  most of it being dropped to fit four blocks (see `x-ss-pyrowave.fecBlocks` in
+  common-c's `docs/pyrowave.md`).
 - **Renderer refresh.** After creating or resetting the renderer, request an
   independent frame through the normal IDR control message. Pyroshine replays
   its cached frame, so reconnect does not wait for a new desktop redraw if the
