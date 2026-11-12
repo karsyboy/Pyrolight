@@ -3,6 +3,7 @@
 #include "streaming/session.h"
 #include "plvkcolorrange.h"
 #include "streaming/streamutils.h"
+#include "utils.h"
 
 // Implementation in plvk_c.c
 #define PL_LIBAV_IMPLEMENTATION 0
@@ -405,6 +406,44 @@ bool PlVkRenderer::tryInitializeDevice(VkPhysicalDevice device, VkPhysicalDevice
         vkParams.async_compute = false;
         vkParams.async_transfer = false;
     }
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(60, 31, 101) && defined(VK_KHR_internally_synchronized_queues)
+    // libplacebo needs explicit opt-in to use internally synchronized queues, since
+    // it requires cooperation with the app (ex: using vkGetDeviceQueue2). We know
+    // FFmpeg 9.0+ always wants internally synchronized queues if available, so we
+    // will turn it on when supported by the physical device.
+    // PyroWave borrows libplacebo's graphics queue with vkGetDeviceQueue, which
+    // cannot return a queue created internally synchronized, so PyroWave streams
+    // keep externally synchronized queues (libplacebo's lock callbacks).
+    if (!(decoderParams->videoFormat & VIDEO_FORMAT_MASK_PYROWAVE) &&
+            isExtensionSupportedByPhysicalDevice(device, "VK_KHR_internally_synchronized_queues")) {
+        bool internallySynchronizedQueues;
+        if (!Utils::getEnvironmentVariableOverride("PLVK_INT_SYNC_QUEUES", &internallySynchronizedQueues)) {
+#if LIBAVUTIL_VERSION_MAJOR < 62
+            // The Gamescope WSI layer currently breaks apps using internally synchronized queues
+            // (failing to use vkGetDeviceQueue2), so we disable this feature when the Gamescope
+            // WSI layer is enabled. See gamescope#2261 for details.
+            internallySynchronizedQueues = (qEnvironmentVariableIntValue("ENABLE_GAMESCOPE_WSI") == 0 ||
+                                            qEnvironmentVariableIntValue("DISABLE_GAMESCOPE_WSI") == 1);
+#else
+            // We have no choice but to enable it since the queue locking callbacks are gone
+            internallySynchronizedQueues = true;
+#endif
+        }
+
+        static VkPhysicalDeviceInternallySynchronizedQueuesFeaturesKHR featInternalSyncQueues = {
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INTERNALLY_SYNCHRONIZED_QUEUES_FEATURES_KHR,
+            nullptr,
+            internallySynchronizedQueues,
+        };
+
+        static const VkPhysicalDeviceFeatures2 features = {
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+            (void*)&featInternalSyncQueues,
+        };
+
+        vkParams.features = &features;
+    }
+#endif
 
     {
         // Don't let Qt take DRM master from us during pl_vulkan_create()

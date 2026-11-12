@@ -13,7 +13,7 @@ CONFIG(release, debug|release) {
 # and straightforward upstream merges. Executables and display names are Pyrolight.
 DEFINES += MOONLIGHT_QT_PYROWAVE
 
-# Enable CFG, EHCont, and CET
+# Enable CFG, EHCont, PAC, and CET
 *-msvc {
     QMAKE_CFLAGS += -guard:cf -guard:ehcont
     QMAKE_CXXFLAGS += -guard:cf -guard:ehcont
@@ -21,6 +21,11 @@ DEFINES += MOONLIGHT_QT_PYROWAVE
 
     contains(QT_ARCH, x86_64) {
         QMAKE_LFLAGS += -cetcompat
+    }
+
+    contains(QT_ARCH, arm64) {
+        QMAKE_CFLAGS += -guard:signret
+        QMAKE_CXXFLAGS += -guard:signret
     }
 }
 

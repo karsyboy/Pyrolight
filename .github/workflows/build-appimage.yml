@@ -80,7 +80,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: libsdl-org/SDL
-          ref: release-3.4.18
+          ref: release-3.4.20
           path: deps/SDL
           persist-credentials: false
 
@@ -100,7 +100,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: libsdl-org/sdl2-compat
-          ref: release-2.32.74
+          ref: bebc6eb01397497130ca58a1cb48c8bd141422f5
           path: deps/sdl2-compat
           persist-credentials: false
 
@@ -148,7 +148,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: haasn/libplacebo
-          ref: 92b5ac6db79f4d680eb656692f7bf51e9606f42a
+          ref: v7.387.0
           path: deps/libplacebo
           submodules: recursive
           persist-credentials: false
@@ -157,7 +157,6 @@ jobs:
         working-directory: deps/libplacebo
         run: |
           set -euo pipefail
-          git apply ../../app/deploy/linux/appimage/*.patch
           meson setup build -Dvulkan=enabled -Dopengl=disabled -Ddemos=false
           ninja -C build
           # Meson is installed in the runner user's Python site. Running the
