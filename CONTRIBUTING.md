@@ -27,7 +27,7 @@ PyroWave support requires the C API 1.1 that Pyroshine's patch series adds to
 
 | Item | Value |
 | --- | --- |
-| Pyroshine commit | `4f1a90b0cc6d2d58663ee29c8a3b8a80e55f3cc2` |
+| Pyroshine commit | `52b4103bb6e7470f8455b14509bc6511871b28b7` |
 | C API | `pyrowave-shared` 1.1.0 (checked by `app/app.pro`) |
 | Granite | `53090429539bf3404250d18fe58db971f0907c04`, from `checkout_granite.sh` |
 
@@ -37,7 +37,7 @@ it without the development applications:
 ```sh
 git clone --filter=blob:none --no-checkout https://github.com/karsyboy/pyroshine.git deps/pyroshine
 git -C deps/pyroshine sparse-checkout set vendor/pyrowave
-git -C deps/pyroshine checkout 4f1a90b0cc6d2d58663ee29c8a3b8a80e55f3cc2
+git -C deps/pyroshine checkout 52b4103bb6e7470f8455b14509bc6511871b28b7
 cp -a deps/pyroshine/vendor/pyrowave deps/PyroWave
 (cd deps/PyroWave && ./checkout_granite.sh)
 cmake -S deps/PyroWave -B build/pyrowave \

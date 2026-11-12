@@ -38,7 +38,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: karsyboy/pyroshine
-          ref: 4f1a90b0cc6d2d58663ee29c8a3b8a80e55f3cc2
+          ref: 52b4103bb6e7470f8455b14509bc6511871b28b7
           path: deps/pyroshine
           sparse-checkout: vendor/pyrowave
           fetch-depth: 1

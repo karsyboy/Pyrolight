@@ -119,7 +119,7 @@ Everything else under `app/` is upstream Moonlight code.
   compatible with upstream-style hosts (Sunshine, GameStream) for standard
   codecs. Capability bits and SDP attributes are shared contracts; change them
   only together with the host and common-c.
-- The PyroWave pin is a Pyroshine commit (`4f1a90b`, C API 1.1.0) whose
+- The PyroWave pin is a Pyroshine commit (`52b4103`, C API 1.1.0) whose
   `vendor/pyrowave` every workflow builds; it appears in every workflow,
   `CONTRIBUTING.md` and `docs/PYROWAVE.md`; keep them identical (CI checks).
   Change PyroWave only through Pyroshine's `vendor/pyrowave-patches/`. The host
