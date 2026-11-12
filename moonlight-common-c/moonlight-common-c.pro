@@ -94,6 +94,12 @@ CONFIG(debug, debug|release) {
     QMAKE_CFLAGS += -std=gnu99
 }
 
+# moonlight-common-c uses C11 atomics (<stdatomic.h>), which MSVC only provides
+# in C11 mode behind an experimental switch (as in its CMakeLists.txt)
+*-msvc {
+    QMAKE_CFLAGS += /std:c11 /experimental:c11atomics
+}
+
 # Disable unused parameter warnings on GCC and Clang
 *-g++|*-clang* {
     QMAKE_CFLAGS_WARN_ON += -Wno-unused-parameter
