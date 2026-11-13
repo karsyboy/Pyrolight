@@ -20,7 +20,7 @@ extern "C" int SDL_GameControllerGetTouchpadFinger(SDL_GameController*, int, int
                                                  float*, float*, float*)
 { *down = touchHeld ? SDL_PRESSED : SDL_RELEASED; return 0; }
 extern "C" {
-int LiSendMultiControllerEvent(short slot, short mask, int buttons, unsigned char lt, unsigned char rt,
+int LiSendMultiControllerEvent(uint8_t slot, uint16_t mask, int buttons, unsigned char lt, unsigned char rt,
                                short lx, short ly, short rx, short ry)
 { packets.push_back({slot, mask, buttons, lt, rt, lx, ly, rx, ry}); return 0; }
 int LiSendMouseMoveEvent(short, short) { ++mouseMoves; return 0; }
