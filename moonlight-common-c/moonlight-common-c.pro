@@ -29,13 +29,12 @@ win32 {
     INCLUDEPATH += $$PWD/../libs/windows/include
     DEFINES += HAS_QOS_FLOWID=1 HAS_PQOS_FLOWID=1
 }
-macx {
+macx:!disable-prebuilts {
     INCLUDEPATH += $$PWD/../libs/mac/include
 }
-unix:!macx {
+unix:if(!macx|disable-prebuilts) {
     CONFIG += link_pkgconfig
     PKGCONFIG += openssl
-    DEFINES += HAVE_CLOCK_GETTIME=1
 }
 
 COMMON_C_DIR = $$PWD/moonlight-common-c
@@ -89,15 +88,9 @@ CONFIG(debug, debug|release) {
     DEFINES += LC_DEBUG
 }
 
-# Older GCC versions defaulted to GNU89
-*-g++ {
-    QMAKE_CFLAGS += -std=gnu99
-}
-
-# moonlight-common-c uses C11 atomics (<stdatomic.h>), which MSVC only provides
-# in C11 mode behind an experimental switch (as in its CMakeLists.txt)
+# Enable support for C11 atomics on MSVC
 *-msvc {
-    QMAKE_CFLAGS += /std:c11 /experimental:c11atomics
+    QMAKE_CFLAGS += -std:c11 -experimental:c11atomics
 }
 
 # Disable unused parameter warnings on GCC and Clang
