@@ -4,6 +4,7 @@
 #include <QQuickWindow>
 
 #include <Limelight.h>
+#include <PyroWave.h>
 #include <opus_multistream.h>
 #include "settings/streamingpreferences.h"
 #include "input/input.h"
@@ -82,10 +83,13 @@ public:
             }
         }
 
-        if (serverCodecModes & SCM_PYROWAVE) mask |= VIDEO_FORMAT_PYROWAVE;
-        if (serverCodecModes & SCM_PYROWAVE_444) mask |= VIDEO_FORMAT_PYROWAVE_444;
-        if (serverCodecModes & SCM_PYROWAVE_HDR) mask |= VIDEO_FORMAT_PYROWAVE_HDR;
-        serverCodecModes &= ~SCM_MASK_PYROWAVE;
+        // Current or legacy PyroWave bits (the legacy ones are also MPEG-2 and
+        // H.263+, which DESCRIBE tells apart; Pyrolight offers neither).
+        const int pyroWaveModes = LiPyroWaveAdvertisedModes(serverCodecModes);
+        if (pyroWaveModes & SCM_PYROWAVE) mask |= VIDEO_FORMAT_PYROWAVE;
+        if (pyroWaveModes & SCM_PYROWAVE_444) mask |= VIDEO_FORMAT_PYROWAVE_444;
+        if (pyroWaveModes & SCM_PYROWAVE_HDR) mask |= VIDEO_FORMAT_PYROWAVE_HDR;
+        serverCodecModes &= ~(SCM_MASK_PYROWAVE | SCM_MASK_PYROWAVE_LEGACY | SCM_PYROWAVE_RECORD_HDR444);
 
         // Make sure nobody forgets to update this for new SCM values
         SDL_assert(serverCodecModes == 0);

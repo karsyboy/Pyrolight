@@ -21,7 +21,7 @@ QVariantList PyroWaveCalibrator::hosts(ComputerManager* manager) {
     for (const auto* pc : manager->getComputers()) {
         QReadLocker lock(&pc->lock);
         if (pc->state == NvComputer::CS_ONLINE && pc->pairState == NvComputer::PS_PAIRED &&
-            (pc->udpProbeVersion > 0 || (pc->serverCodecModeSupport & SCM_MASK_PYROWAVE)))
+            (pc->udpProbeVersion > 0 || LiPyroWaveAdvertisedModes(pc->serverCodecModeSupport)))
             result.append(QVariantMap{{"name", pc->name}, {"uuid", pc->uuid}, {"address", pc->activeAddress.address()}});
     }
     return result;
@@ -37,7 +37,7 @@ void PyroWaveCalibrator::start(ComputerManager* manager, const QString& uuid) {
     if (manager) for (const auto* pc : manager->getComputers()) {
         QReadLocker lock(&pc->lock);
         if (pc->uuid != uuid || pc->state != NvComputer::CS_ONLINE || pc->pairState != NvComputer::PS_PAIRED ||
-            !(pc->udpProbeVersion > 0 || (pc->serverCodecModeSupport & SCM_MASK_PYROWAVE))) continue;
+            !(pc->udpProbeVersion > 0 || LiPyroWaveAdvertisedModes(pc->serverCodecModeSupport))) continue;
         address = pc->activeAddress; certificate = pc->serverCert;
         port = pc->activeHttpsPort; trueUid = !pc->isNvidiaServerSoftware; break;
     }
@@ -77,7 +77,7 @@ void PyroWaveCalibrator::start(ComputerManager* manager, const QString& uuid) {
             }
             if (NvHTTP::getXmlString(info, "PyroWaveBandwidthProbeBytes").toLongLong() != PyroWaveBandwidth::ProbeBytes)
                 throw std::runtime_error("This host does not support the 32 MiB PyroWave bandwidth probe.");
-            if (!(NvHTTP::getXmlString(info, "ServerCodecModeSupport").toUInt() & SCM_MASK_PYROWAVE) ||
+            if (!(LiPyroWaveAdvertisedModes(NvHTTP::getXmlString(info, "ServerCodecModeSupport").toInt())) ||
                 NvHTTP::getXmlString(info, "PairStatus") != "1")
                 throw std::runtime_error("Host is no longer paired or PyroWave-capable.");
             const auto hostMbps = NvHTTP::getXmlString(info, "PyroWaveHostLinkMbps").toLongLong();
