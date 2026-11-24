@@ -950,11 +950,9 @@ int main(int argc, char *argv[])
 
     // After the QGuiApplication is created, the platform stuff will be initialized
     // and we can set the SDL video driver to match Qt.
+    // libva has supported DRI3 on XWayland for years, so XWayland gets no
+    // hardware decoding warning (upstream d0ce1585).
     DisplayBackend::Kind displayBackend = DisplayBackend::current();
-    if (displayBackend == DisplayBackend::Kind::XWayland) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                    "Detected XWayland. This will probably break hardware decoding! Try running with QT_QPA_PLATFORM=wayland or switch to X11.");
-    }
     const char* sdlVideoDriver = DisplayBackend::sdlVideoDriver(displayBackend);
 #ifdef STEAM_LINK
     // Only force KMSDRM for Qt platform plugins that directly draw to the

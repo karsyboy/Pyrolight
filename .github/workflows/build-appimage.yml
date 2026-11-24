@@ -80,7 +80,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: libsdl-org/SDL
-          ref: release-3.4.20
+          ref: d3926e74bd58eaf5f157ff809f0cb781f2a574b0
           path: deps/SDL
           persist-credentials: false
 
@@ -170,7 +170,7 @@ jobs:
       - name: Build dav1d
         working-directory: deps
         env:
-          DAV1D_VERSION: 1.5.4
+          DAV1D_VERSION: 1.5.5
         run: |
           set -euo pipefail
           git clone --branch "${DAV1D_VERSION}" --depth 1 https://code.videolan.org/videolan/dav1d.git
@@ -184,7 +184,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: FFmpeg/FFmpeg
-          ref: n9.0.2
+          ref: n9.1
           path: deps/FFmpeg
           persist-credentials: false
 
