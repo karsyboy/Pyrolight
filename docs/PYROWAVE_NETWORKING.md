@@ -126,9 +126,15 @@ negotiated record sessions. Legacy length-prefixed payloads are rejected,
 including on reconnect. Automatic codec selection still uses the conventional
 codecs.
 
-HTTP HDR capabilities are translated at setup: native HDR is the orthogonal
-`0x02000000` bit; record HDR 4:2:0 uses that bit and HDR 4:4:4 uses
-`0x04000000`. After setup, decoder and renderer configuration use local chroma,
+HTTP capabilities are translated at setup. Current hosts advertise PyroWave
+4:2:0, 4:4:4 and HDR as `0x10000000`, `0x20000000` and the orthogonal
+`0x40000000`, and Pyrolight announces `bitStreamFormat` 16. Hosts from before
+2026-11 (and Nonary-derived record hosts) advertise only the legacy
+`0x00800000`, `0x01000000` and `0x02000000`, which upstream moonlight-common-c
+now uses for MPEG-2 and H.263+; Pyrolight reads them as PyroWave only when
+DESCRIBE carries PyroWave's attributes, and then announces the legacy
+`bitStreamFormat` 3. On a legacy record host, HDR 4:2:0 uses `0x02000000` and
+HDR 4:4:4 uses `0x04000000`. After setup, decoder and renderer configuration use local chroma,
 depth and range values. Nonary-derived hosts leave default sequence-header color
 bits, which are normalized from SDP only in record mode.
 
